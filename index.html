@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Poseidon Trail</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Poseidon Trail">
+<meta name="theme-color" content="#1F4E79">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header id="topbar">
+  <a href="#scores" id="scoreStrip" aria-label="Scoreboard">
+    <span class="team heroes">Heroes <b id="stripHeroes">0</b></span>
+    <span class="vs">vs</span>
+    <span class="team parents"><b id="stripParents">0</b> Parents</span>
+  </a>
+</header>
+
+<main id="screen"></main>
+
+<nav id="tabbar">
+  <a href="#home" data-tab="home"><span class="ico">&#128506;</span>Trail</a>
+  <a href="#trivia" data-tab="trivia"><span class="ico">&#10067;</span>Trivia</a>
+  <a href="#badges" data-tab="badges"><span class="ico">&#128737;</span>Badges</a>
+  <a href="#scores" data-tab="scores"><span class="ico">&#127963;</span>Scores</a>
+</nav>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
