@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Poseidon Trail: Phase 0 Spike</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Poseidon Trail">
+<style>
+  :root { --blue:#1F4E79; --aegean:#2E75B6; --sand:#F5EFE0; --gold:#B8860B; }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body { font-family:-apple-system, Helvetica, sans-serif; background:var(--blue); color:var(--sand); min-height:100vh; padding:24px 20px 60px; }
+  h1 { font-size:26px; margin-bottom:4px; }
+  .sub { opacity:.8; font-size:14px; margin-bottom:20px; }
+  .card { background:rgba(255,255,255,.08); border-radius:14px; padding:16px; margin-bottom:16px; }
+  .card h2 { font-size:17px; margin-bottom:10px; color:#fff; }
+  button, label.btn { display:block; width:100%; padding:16px; border:0; border-radius:12px; background:var(--aegean); color:#fff; font-size:18px; font-weight:700; text-align:center; cursor:pointer; }
+  .status { margin-top:10px; font-size:14px; line-height:1.5; }
+  .ok { color:#7CFC9A; } .bad { color:#FF9E9E; }
+  #photoView { width:100%; border-radius:10px; margin-top:10px; display:none; }
+  input[type=file] { display:none; }
+  .story { font-size:15px; line-height:1.6; margin-bottom:12px; }
+  .foot { font-size:12px; opacity:.6; text-align:center; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>The Poseidon Trail</h1>
+<div class="sub">Phase 0 spike · v0.1 · proves offline works before we build the game</div>
+
+<div class="card">
+  <h2>Test 1: Story + audio, offline</h2>
+  <div class="story">Poseidon, lord of the sea, watched the Phaeacian ship carry Odysseus home. His grudge was not finished. As the ship sailed back into the bay of Scheria, he touched it once with his trident and it turned to stone. It is still there. You will find it.</div>
+  <button id="playBtn">Play the sound of the sea god</button>
+  <audio id="story" src="story.mp3" preload="auto" playsinline></audio>
+  <div class="status" id="audioStatus">Tap play. Then test with the silent switch ON: it must still play.</div>
+</div>
+
+<div class="card">
+  <h2>Test 2: Photo saved on this device</h2>
+  <label class="btn" for="cam">Take a quest photo</label>
+  <input id="cam" type="file" accept="image/*" capture="environment">
+  <img id="photoView" alt="quest photo">
+  <div class="status" id="photoStatus">Photo saves to this device's storage. Close the app fully, reopen: it must still be here.</div>
+</div>
+
+<div class="card">
+  <h2>Test 3: Offline + install checks</h2>
+  <div class="status" id="checks">Running...</div>
+</div>
+
+<div class="card">
+  <h2>How to run the full test</h2>
+  <div class="status">
+    1. In Safari: Share button, then "Add to Home Screen". Open from the icon, not Safari.<br>
+    2. Play the story, take a photo.<br>
+    3. Airplane mode ON. Close the app fully (swipe away).<br>
+    4. Reopen from the icon: story must play, photo must still be there.<br>
+    5. Flip the silent switch and play again: audio must sound.
+  </div>
+</div>
+<div class="foot">Poseidon is watching. No signal required.</div>
+
+<script>
+// Service worker
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
+// Test 1: audio
+const audio = document.getElementById('story');
+const audioStatus = document.getElementById('audioStatus');
+document.getElementById('playBtn').onclick = () => {
+  audio.currentTime = 0;
+  audio.play().then(() => audioStatus.innerHTML = '<span class="ok">Playing. If you hear it with the silent switch on, Test 1 passes.</span>')
+    .catch(e => audioStatus.innerHTML = '<span class="bad">Playback failed: ' + e.message + '</span>');
+};
+
+// Test 2: photo to IndexedDB
+const DB = 'ptrail', STORE = 'photos';
+function db() { return new Promise((res, rej) => {
+  const r = indexedDB.open(DB, 1);
+  r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+});}
+async function savePhoto(blob) { const d = await db();
+  return new Promise((res, rej) => { const tx = d.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(blob, 'quest1'); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });}
+async function loadPhoto() { const d = await db();
+  return new Promise((res) => { const rq = d.transaction(STORE).objectStore(STORE).get('quest1');
+    rq.onsuccess = () => res(rq.result); rq.onerror = () => res(null); });}
+const photoStatus = document.getElementById('photoStatus');
+const photoView = document.getElementById('photoView');
+function show(blob, saved) {
+  photoView.src = URL.createObjectURL(blob); photoView.style.display = 'block';
+  photoStatus.innerHTML = saved
+    ? '<span class="ok">Saved to device. Now close the app fully and reopen: it must survive.</span>'
+    : '<span class="ok">Restored from device storage. Test 2 passes.</span>';
+}
+document.getElementById('cam').onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try { await savePhoto(f); show(f, true); }
+  catch (err) { photoStatus.innerHTML = '<span class="bad">Save failed: ' + err.message + '</span>'; }
+};
+loadPhoto().then(b => { if (b) show(b, false); });
+
+// Test 3: environment checks
+(async () => {
+  const lines = [];
+  const standalone = window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  lines.push(standalone ? '<span class="ok">Running from Home Screen icon.</span>'
+                        : '<span class="bad">Running in Safari. Add to Home Screen and reopen from the icon.</span>');
+  lines.push(navigator.onLine ? 'Currently online.' : '<span class="ok">Currently OFFLINE. Perfect for the test.</span>');
+  if (navigator.storage && navigator.storage.persist) {
+    const p = await navigator.storage.persist();
+    lines.push(p ? '<span class="ok">Storage marked persistent.</span>' : 'Persistent storage not granted (normal on iOS; home-screen install is our protection).');
+  }
+  if (navigator.storage && navigator.storage.estimate) {
+    const e = await navigator.storage.estimate();
+    lines.push('Storage quota: ' + Math.round((e.quota||0)/1048576) + ' MB, used: ' + Math.round((e.usage||0)/1048576) + ' MB.');
+  }
+  const sw = await navigator.serviceWorker.getRegistration();
+  lines.push(sw ? '<span class="ok">Service worker registered: offline cache active.</span>' : '<span class="bad">No service worker yet. Reload once.</span>');
+  document.getElementById('checks').innerHTML = lines.join('<br>');
+})();
+</script>
+</body>
+</html>
