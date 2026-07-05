@@ -1,9 +1,10 @@
-const CACHE = 'ptrail-app-v1';
+const CACHE = 'ptrail-app-v2';
 const ASSETS = [
   './',
   'index.html',
   'css/app.css',
   'js/data.js',
+  'js/pack-corfu.js',
   'js/app.js',
   'manifest.json',
   'icons/icon-180.png',

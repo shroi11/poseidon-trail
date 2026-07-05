@@ -169,6 +169,38 @@ select, input[type=number], input[type=text] {
 }
 label { display: block; font-size: 14px; opacity: .8; margin-bottom: 6px; }
 
+/* Night & quest lists on the trail */
+.rowlist { margin-top: 8px; }
+.list-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 2px; text-decoration: none; color: var(--sand);
+  border-bottom: 1px solid rgba(255,255,255,.09); font-size: 17px;
+}
+.list-row:last-child { border-bottom: 0; }
+.list-row .sym { font-size: 22px; width: 28px; text-align: center; }
+.list-row .grow { flex: 1; }
+.list-row.done { opacity: .55; }
+.chip-tonight {
+  background: var(--gold-bright); color: #2B1D00;
+  border-radius: 999px; font-size: 11px; font-weight: 700; padding: 4px 9px;
+  letter-spacing: .05em;
+}
+
+/* Read-along story */
+.story-read { font-family: Georgia, 'Times New Roman', serif; font-size: 19px; line-height: 1.75; }
+.story-read p + p { margin-top: 14px; }
+
+/* Quests */
+.mission { background: rgba(255,255,255,.08); border-radius: 16px; padding: 14px; margin-bottom: 12px; }
+.mission .mtext { font-size: 16px; line-height: 1.5; margin-bottom: 12px; }
+.mission-btn.done-btn, label.done-btn { background: #2E8B57; }
+.quest-photo { width: 100%; border-radius: 10px; margin-top: 10px; }
+
+/* God badges: pottery medallion look */
+.badge.medal { background: radial-gradient(circle at 50% 38%, #A0522D 0%, #7B3F20 70%, #5C2E14 100%); }
+.badge.medal.earned { border-color: var(--gold-bright); }
+.badge.medal .name { color: #F7E3C0; }
+
 .history { font-size: 15px; line-height: 1.7; }
 .history .h-heroes { color: var(--ok); }
 .history .h-parents { color: var(--bad); }
