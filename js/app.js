@@ -611,7 +611,7 @@ function missionRows(q, p) {
     if (m.type === 'photo') {
       control = '<label class="bigbtn mission-btn' + (done ? ' done-btn' : '') + '" for="mcam-' + m.id + '">' +
         (done ? '✓ Photo captured' : '\u{1F4F8} Take the quest photo') + '</label>' +
-        '<input id="mcam-' + m.id + '" type="file" accept="image/*" capture="environment" data-mission="' + m.id + '" style="display:none">' +
+        '<input id="mcam-' + m.id + '" type="file" accept="image/*" data-mission="' + m.id + '" style="display:none">' +
         '<img class="quest-photo" id="mphoto-' + m.id + '" alt="quest photo" style="display:none">';
     } else if (m.type === 'here') {
       control = '<button class="mission-btn' + (done ? ' done-btn' : '') + '" data-mission="' + m.id + '">' +
