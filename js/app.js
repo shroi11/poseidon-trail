@@ -30,7 +30,8 @@ var DEFAULT_STATE = {
   guestBadges: [],        // {name, night, when}
   reverseDone: {},        // promptId -> points awarded
   finaleDone: false,
-  storiesRead: {}         // roadstoryId -> true (opened at least once)
+  storiesRead: {},        // roadstoryId -> true (opened at least once)
+  hadesStep: 0            // riddles solved (4 = the hidden god found)
 };
 
 // Badge ids earned under the pre-artwork scheme map onto the 20-badge set.
@@ -229,10 +230,11 @@ function awardBadge(id, by) {
   return badgeById(id);
 }
 
-// The Pantheon badge unlocks when all 12 god badges are in the collection.
+// The Pantheon badge unlocks when all 12 Olympian god badges are collected.
+// Hidden badges (Hades) are their own quest and don't count toward it.
 function checkPantheon() {
   var allGods = BADGES.every(function (b) {
-    return b.id.indexOf('god-') !== 0 || state.badges[b.id];
+    return b.hidden || b.id.indexOf('god-') !== 0 || state.badges[b.id];
   });
   if (!allGods) return [];
   var b = awardBadge('pantheon', 'family');
@@ -669,7 +671,8 @@ function screenReverse() {
         '<button class="ghost rr-btn" data-rr="' + rr.id + '" data-pts="10">With help +10</button></div>';
     return '<div class="card rr-card' + (earned ? ' done' : '') + '">' +
       '<div class="place">' + esc(rr.where) + '</div>' +
-      '<div class="rr-name">' + rr.symbol + ' ' + esc(rr.name) + '</div>' +
+      '<img class="villain-img" src="assets/villains/villain-' + rr.id.slice(3) + '.svg" alt="' + esc(rr.name) + '" data-fallback="' + rr.symbol + '">' +
+      '<div class="rr-name">' + esc(rr.name) + '</div>' +
       '<div class="rules" style="text-align:center">' + esc(rr.hint) + '</div>' +
       controls + '</div>';
   }).join('');
@@ -678,6 +681,31 @@ function screenReverse() {
     '<div class="sub">You’re driving Theseus’s road in reverse. At each landmark, a Hero retells the story in their own words — the app only gives the name. Full retelling in your own words scores DOUBLE (' + done + '/' + total + ' done).</div>' +
     cards +
     '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
+}
+
+function screenUnderworld() {
+  if (!window.HADES) { location.hash = '#home'; return ''; }
+  var step = state.hadesStep;
+  var total = HADES.riddles.length;
+  if (step >= total) {
+    var b = badgeById('god-hades');
+    return '<div class="underworld"><div class="ceremony">' +
+      '<div class="trophy">' + badgeArt(b) + '</div>' +
+      '<h1>The Quiet One</h1>' +
+      '<div class="rules">You found the god nobody talks about. Hades keeps his word: the thirteenth badge is yours, Heroes, and ' + HADES.points + ' points came up with it from below.</div>' +
+      '<button id="backHomeBtn" class="gold" style="margin-top:20px">Back to the daylight</button>' +
+      '</div></div>';
+  }
+  return '<div class="underworld">' +
+    '<div class="place">The Underworld · riddle ' + (step + 1) + ' of ' + total + '</div>' +
+    '<h1>A voice from below</h1>' +
+    '<div class="sub">Someone has been watching you collect his family. Answer, and descend.</div>' +
+    '<div class="card qcard"><div class="qtext story-font">' + esc(HADES.riddles[step].riddle) + '</div></div>' +
+    '<input id="hadesAnswer" type="text" placeholder="Whisper your answer…" autocomplete="off" autocapitalize="none">' +
+    '<button id="hadesSubmit" class="gold">Answer</button>' +
+    '<div class="status" id="hadesMsg" style="margin-top:10px;text-align:center"></div>' +
+    '<button class="ghost" id="backHomeBtn" style="margin-top:18px">Climb back to the daylight</button>' +
+    '</div>';
 }
 
 function screenJournal() {
@@ -696,8 +724,14 @@ function screenJournal() {
         return '<div>' + (d.getMonth() + 1) + '/' + d.getDate() + ' · ' + esc(h.label) + (pts.length ? ' · ' + pts.join(' / ') : '') + '</div>';
       }).join('')
     : '<div>The journal writes itself as you play.</div>';
-  return '<h1>The Book of the Trail</h1>' +
-    '<div class="sub">Heroes ' + state.scores.heroes + ' — ' + state.scores.parents + ' Parents · the souvenir builds itself.</div>' +
+  return '<div class="print-only print-title">' +
+    '<h1>The Poseidon Trail</h1>' +
+    '<div>Greece · July 12–24, 2026 · Adam & Leo, Heroes</div>' +
+    '<div class="print-score">Final score · Heroes ' + state.scores.heroes + ' — ' + state.scores.parents + ' Parents</div>' +
+    '</div>' +
+    '<h1 class="no-print">The Book of the Trail</h1>' +
+    '<div class="sub no-print">Heroes ' + state.scores.heroes + ' — ' + state.scores.parents + ' Parents · the souvenir builds itself.</div>' +
+    '<button id="printJournalBtn" class="ghost no-print" style="margin-bottom:14px;min-height:48px;font-size:15px">\u{1F5A8} Print / save the Book as PDF</button>' +
     '<div class="card"><h2>Quest photos</h2><div class="journal-grid" id="journalPhotos"><div class="rules">Loading photos…</div></div></div>' +
     '<div class="card"><h2>Badges earned</h2>' + badgesHtml + '</div>' +
     '<div class="card"><h2>The story so far</h2><div class="history">' + timeline + '</div></div>';
@@ -705,13 +739,42 @@ function screenJournal() {
 
 function badgeArt(b) {
   return b.img
-    ? '<img class="badge-img" src="' + b.img + '" alt="' + esc(b.name) + '">'
+    ? '<img class="badge-img" src="' + b.img + '" alt="' + esc(b.name) + '" data-fallback="' + (b.fallback || '\u{1F3C5}') + '">'
     : '<span class="art">' + b.art + '</span>';
+}
+
+// Missing artwork degrades to a symbol instead of a broken-image icon.
+document.addEventListener('error', function (e) {
+  var t = e.target;
+  if (t && t.tagName === 'IMG' && t.dataset && t.dataset.fallback) {
+    var s = document.createElement('span');
+    s.className = 'art';
+    s.textContent = t.dataset.fallback;
+    t.replaceWith(s);
+  }
+}, true);
+
+// Short stingers for ceremonies. Precached, so they fire offline too.
+var sfxEl = new Audio();
+function sfx(name) {
+  try {
+    sfxEl.src = 'audio/sfx/' + name + '.mp3';
+    sfxEl.currentTime = 0;
+    sfxEl.play().catch(function () {});
+  } catch (e) {}
 }
 
 function screenBadges() {
   var html = BADGES.map(function (b) {
     var e = state.badges[b.id];
+    if (b.hidden && !e) {
+      // The unmarked door to the underworld. Curious Heroes will find it.
+      return '<a class="badge shadow" href="#underworld">' +
+        '<span class="art">?</span>' +
+        '<span class="name">· · ·</span>' +
+        '<span class="how">' + (state.hadesStep > 0 ? 'The door is open' : '&nbsp;') + '</span>' +
+        '</a>';
+    }
     var cls = e ? 'earned' : 'locked';
     return '<div class="badge ' + cls + '">' +
       badgeArt(b) +
@@ -879,7 +942,7 @@ function screenShowdown() {
 
 /* ---------- Router ---------- */
 
-var SCREENS = { home: screenHome, trivia: screenTrivia, badges: screenBadges, scores: screenScores, showdown: screenShowdown, journal: screenJournal, reverse: screenReverse, finale: screenFinale };
+var SCREENS = { home: screenHome, trivia: screenTrivia, badges: screenBadges, scores: screenScores, showdown: screenShowdown, journal: screenJournal, reverse: screenReverse, finale: screenFinale, underworld: screenUnderworld };
 
 function route() {
   var h = (location.hash || '#home').slice(1);
@@ -962,7 +1025,29 @@ function bind(r) {
     });
   }
 
+  if (r.name === 'underworld' && window.HADES) {
+    if (state.hadesStep === 0) sfx('underworld'); // the door creaks open
+    el = $('#hadesSubmit'); if (el) el.onclick = function () {
+      var raw = ($('#hadesAnswer').value || '').toLowerCase().trim().replace(/^the\s+/, '');
+      var ok = HADES.riddles[state.hadesStep].accept.indexOf(raw) !== -1;
+      if (!ok) {
+        $('#hadesMsg').innerHTML = '<span class="bad">The shadows are silent. Think back to the stories…</span>';
+        return;
+      }
+      state.hadesStep++;
+      if (state.hadesStep >= HADES.riddles.length) {
+        awardBadge('god-hades', 'heroes');
+        state.scores.heroes += HADES.points;
+        state.history.unshift({ when: new Date().toISOString(), label: 'The Hidden God: found', heroes: HADES.points, parents: 0 });
+        sfx('underworld');
+      }
+      saveState(); render();
+    };
+    el = $('#hadesAnswer'); if (el) el.onkeydown = function (e) { if (e.key === 'Enter') $('#hadesSubmit').click(); };
+  }
+
   if (r.name === 'journal') {
+    el = $('#printJournalBtn'); if (el) el.onclick = function () { window.print(); };
     idbKeys('photos').then(function (keys) {
       var holder = $('#journalPhotos');
       if (!holder) return;
@@ -1051,6 +1136,7 @@ function bind(r) {
 
   if (r.name === 'showdown') {
     if (ceremony) {
+      if (!ceremony.fanfared) { ceremony.fanfared = true; sfx('fanfare'); }
       document.querySelectorAll('.guest-toggle').forEach(function (btn) {
         btn.onclick = function () {
           var g = ceremony.guests[parseInt(btn.dataset.gi, 10)];

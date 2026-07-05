@@ -219,6 +219,44 @@ label { display: block; font-size: 14px; opacity: .8; margin-bottom: 6px; }
 .trail-complete h2 { color: var(--gold-bright); letter-spacing: .06em; margin: 8px 0; }
 .trail-complete .badge-img { width: 84px; height: 84px; }
 
+/* The hidden door */
+.badge.shadow {
+  background: radial-gradient(circle at 50% 40%, #1a1024 0%, #0c0812 80%);
+  border: 1px solid rgba(120, 90, 160, .25);
+  text-decoration: none; color: var(--sand); display: block;
+}
+.badge.shadow .art { opacity: .3; font-size: 40px; }
+.badge.shadow .name { opacity: .4; }
+.underworld { animation: descend .6s ease-out; }
+@keyframes descend { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+.underworld h1, .underworld .place { color: #B9A0E8; }
+.underworld .card { background: rgba(20, 12, 34, .75); border: 1px solid rgba(120, 90, 160, .3); }
+
+/* Reverse Run villain art */
+.villain-img { width: 130px; height: 130px; display: block; margin: 4px auto 2px; }
+.rr-card .art { font-size: 64px; display: block; margin: 6px auto; }
+
+/* Print: the journal becomes the keepsake */
+.print-only { display: none; }
+@media print {
+  body { background: #fff; color: #111; padding: 0; }
+  #topbar, #tabbar, button, .no-print { display: none !important; }
+  #screen { max-width: none; padding: 0; }
+  .print-only { display: block; }
+  .print-title { text-align: center; margin: 0 0 18px; }
+  .print-title h1 { font-size: 34px; }
+  .print-score { font-size: 18px; margin-top: 6px; font-weight: 700; }
+  .card { background: none; border: 1px solid #ccc; break-inside: avoid; }
+  .card h2 { color: #111; }
+  .sub, .place, .how, .rules, .history, figcaption { color: #333; opacity: 1; }
+  .history .h-heroes, .history .h-parents { color: #333; font-weight: 700; }
+  .badge { border: 1px solid #ccc; background: none; }
+  .badge .name { color: #111; }
+  .badge.locked { display: none; }
+  .journal-grid { grid-template-columns: repeat(2, 1fr); }
+  .journal-photo img { border-radius: 4px; }
+}
+
 .history { font-size: 15px; line-height: 1.7; }
 .history .h-heroes { color: var(--ok); }
 .history .h-parents { color: var(--bad); }
