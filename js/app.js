@@ -29,7 +29,8 @@ var DEFAULT_STATE = {
   questProgress: {},      // questId -> {missions:{}, claimed:false}
   guestBadges: [],        // {name, night, when}
   reverseDone: {},        // promptId -> points awarded
-  finaleDone: false
+  finaleDone: false,
+  storiesRead: {}         // roadstoryId -> true (opened at least once)
 };
 
 // Badge ids earned under the pre-artwork scheme map onto the 20-badge set.
@@ -285,6 +286,36 @@ function packById(id) {
   return PACKS[0];
 }
 
+// Anti-skip gates. The question bank's rule: questions unlock only after the
+// family visits the site or hears the story, so nothing spoils the reveal.
+function nightLocked(n) {
+  if (state.nightsDone[n.id]) return false;
+  var t = tonightNight();
+  return t && n.num > t.num;
+}
+function reverseLocked() {
+  return !state.badges['hero-theseus'];
+}
+function finaleUnlocked() {
+  return state.finaleDone || !!(state.questProgress.finale && state.questProgress.finale.missions.m1);
+}
+function packAvailable(p) {
+  if (p.id === 'warmup') return true;
+  var night = nightById(p.id);
+  if (night) return !nightLocked(night);
+  if (p.id === 'road-theseus') return !!state.storiesRead.roadstory3 || !!state.badges['hero-theseus'];
+  if (p.id === 'finale-sounio') return finaleUnlocked();
+  var q = questById(p.id);
+  if (q) {
+    var pr = state.questProgress[q.id];
+    return !!(pr && (pr.missions.m1 || pr.claimed));
+  }
+  return true;
+}
+function availablePacks(extraId) {
+  return PACKS.filter(function (p) { return packAvailable(p) || p.id === extraId; });
+}
+
 function buildOrder(pack, perTier) {
   var byTier = { leo: [], adam: [], parents: [] };
   pack.questions.forEach(function (q, idx) { byTier[q.tier].push(idx); });
@@ -384,10 +415,10 @@ function finishShowdown() {
 
 /* ---------- Quick trivia ---------- */
 
-var quick = { tier: 'leo', packIdx: 0, qIndex: -1, revealed: false, recent: [] };
+var quick = { tier: 'leo', packId: 'warmup', qIndex: -1, revealed: false, recent: [] };
 
 function nextQuick() {
-  var pack = PACKS[quick.packIdx] || PACKS[0];
+  var pack = packById(quick.packId);
   var pool = [];
   pack.questions.forEach(function (q, idx) {
     if (q.tier === quick.tier && quick.recent.indexOf(idx) === -1) pool.push(idx);
@@ -429,6 +460,10 @@ function screenHome() {
   var nightRows = NIGHTS.map(function (n) {
     var done = !!state.nightsDone[n.id];
     var isTonight = tonight && tonight.id === n.id;
+    if (nightLocked(n)) {
+      return '<div class="list-row done"><span class="sym">\u{1F512}</span>' +
+        '<span class="grow">Night ' + n.num + ': sealed</span></div>';
+    }
     return '<a class="list-row ' + (done ? 'done' : '') + '" href="#night-' + n.num + '">' +
       '<span class="sym">' + n.symbol + '</span>' +
       '<span class="grow">Night ' + n.num + ': ' + esc(n.god) + '</span>' +
@@ -447,10 +482,13 @@ function screenHome() {
   var athensRow = roadSites.length ? questRow(roadSites[0]) : '';
   var restRows = roadSites.slice(1).map(questRow).join('');
   var rrDone = Object.keys(state.reverseDone).length;
-  var reverseRow = ROAD.reverse.length
-    ? '<a class="list-row" href="#reverse"><span class="sym">\u{1F501}</span><span class="grow">Reverse Run · the drive back</span>' +
-      (rrDone ? '<span class="ok">' + rrDone + '/' + ROAD.reverse.length + '</span>' : '<span class="chip-tonight">2× PTS</span>') + '</a>'
-    : '';
+  var reverseRow = '';
+  if (ROAD.reverse.length) {
+    reverseRow = reverseLocked()
+      ? '<div class="list-row done"><span class="sym">\u{1F512}</span><span class="grow">Reverse Run · sealed until the Road Showdown</span></div>'
+      : '<a class="list-row" href="#reverse"><span class="sym">\u{1F501}</span><span class="grow">Reverse Run · the drive back</span>' +
+        (rrDone ? '<span class="ok">' + rrDone + '/' + ROAD.reverse.length + '</span>' : '<span class="chip-tonight">2× PTS</span>') + '</a>';
+  }
 
   var finaleRow = ROAD.finale
     ? '<a class="list-row ' + (state.finaleDone ? 'done' : '') + '" href="#finale">' +
@@ -499,6 +537,13 @@ function screenHome() {
 function screenNight(num) {
   var n = NIGHTS[num - 1];
   if (!n) { location.hash = '#home'; return ''; }
+  if (nightLocked(n)) {
+    var t = tonightNight();
+    return '<div class="place">Night ' + n.num + ' of 8</div>' +
+      '<h1>\u{1F512} Sealed</h1>' +
+      '<div class="sub">The gods reveal themselves one night at a time. Tonight is Night ' + (t ? t.num : 1) + '.</div>' +
+      '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
+  }
   var done = !!state.nightsDone[n.id];
   return '<div class="place">Night ' + n.num + ' of 8 · ' + esc(n.god) + (done ? ' · <span class="ok">complete ✓</span>' : '') + '</div>' +
     '<h1>' + esc(n.title) + '</h1>' +
@@ -575,6 +620,15 @@ function screenFinale() {
   var f = ROAD.finale;
   if (!f) { location.hash = '#home'; return ''; }
   var p = state.questProgress.finale || { missions: {}, claimed: false };
+  if (!finaleUnlocked()) {
+    // Sealed until the family is physically at the temple. Parents tap the unlock.
+    return '<div class="place">Act III · ' + esc(f.place) + '</div>' +
+      '<h1>\u{1F512} ' + esc(f.title) + '</h1>' +
+      '<div class="sub story-font">The end of the trail is sealed until you stand on the cliff at Sounio. The sea god will know if you skip ahead. He always knows.</div>' +
+      '<div class="mission"><div class="mtext">' + esc(f.missions[0].text) + '</div>' +
+      '<button class="mission-btn" data-mission="m1">\u{1F4CD} We’re here!</button></div>' +
+      '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
+  }
   var allDone = f.missions.every(function (m) { return p.missions[m.id]; });
   var banner = state.finaleDone
     ? '<div class="card trail-complete"><img class="badge-img" src="assets/badges/badge-poseidon.svg" alt="Poseidon">' +
@@ -598,6 +652,12 @@ function screenFinale() {
 }
 
 function screenReverse() {
+  if (reverseLocked()) {
+    return '<div class="place">The drive back</div>' +
+      '<h1>\u{1F512} Reverse Run</h1>' +
+      '<div class="sub">Sealed until the Heroes have beaten the Road Showdown — you can’t retell stories you haven’t heard.</div>' +
+      '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
+  }
   var total = ROAD.reverse.length;
   var done = Object.keys(state.reverseDone).length;
   var cards = ROAD.reverse.map(function (rr) {
@@ -670,12 +730,14 @@ function screenBadges() {
 }
 
 function screenTrivia() {
+  var packs = availablePacks();
+  if (!packs.some(function (p) { return p.id === quick.packId; })) { quick.packId = packs[0].id; quick.recent = []; quick.qIndex = -1; }
   if (quick.qIndex === -1) nextQuick();
-  var pack = PACKS[quick.packIdx] || PACKS[0];
+  var pack = packById(quick.packId);
   var q = pack.questions[quick.qIndex];
   var packSel = '<label for="packSel">Question pack</label><select id="packSel">' +
-    PACKS.map(function (p, i) {
-      return '<option value="' + i + '"' + (quick.packIdx === i ? ' selected' : '') + '>' + esc(p.title) + '</option>';
+    packs.map(function (p) {
+      return '<option value="' + p.id + '"' + (quick.packId === p.id ? ' selected' : '') + '>' + esc(p.title) + '</option>';
     }).join('') + '</select>';
   var body;
   if (!q) {
@@ -775,8 +837,10 @@ function screenShowdown() {
   if (ceremony) return ceremonyScreen();
   if (!live) {
     var tonight = tonightNight();
-    var defaultPack = preferredPack || (tonight ? tonight.id : PACKS[0].id);
-    var options = PACKS.map(function (p) {
+    var packs = availablePacks(preferredPack);
+    var defaultPack = preferredPack || (tonight ? tonight.id : packs[0].id);
+    if (!packs.some(function (p) { return p.id === defaultPack; })) defaultPack = packs[0].id;
+    var options = packs.map(function (p) {
       var night = nightById(p.id);
       var mark = night && state.nightsDone[p.id] ? ' ✓' : '';
       return '<option value="' + p.id + '"' + (p.id === defaultPack ? ' selected' : '') + '>' + esc(p.title) + mark + '</option>';
@@ -862,6 +926,7 @@ function bind(r) {
 
   if (r.name === 'roadstory') {
     var rs = ROAD.stories[r.num - 1];
+    if (!state.storiesRead[rs.id]) { state.storiesRead[rs.id] = true; saveState(); }
     ensureNightAudio(rs).catch(function () {});
     $('#playNightBtn').onclick = function () { playNight(rs); };
     if (audioPlaying === rs.id && !audioEl.paused) $('#playNightBtn').textContent = '⏸ Pause';
@@ -872,8 +937,10 @@ function bind(r) {
 
   if (r.name === 'finale' && ROAD.finale) {
     ensureNightAudio(ROAD.finale).catch(function () {});
-    $('#playNightBtn').onclick = function () { playNight(ROAD.finale); };
-    if (audioPlaying === ROAD.finale.id && !audioEl.paused) $('#playNightBtn').textContent = '⏸ Pause';
+    el = $('#playNightBtn'); if (el) {
+      el.onclick = function () { playNight(ROAD.finale); };
+      if (audioPlaying === ROAD.finale.id && !audioEl.paused) el.textContent = '⏸ Pause';
+    }
     bindQuestControls(finaleQuestEntity());
     el = $('#finaleShowdownBtn'); if (el) el.onclick = function () { preferredPack = 'finale-sounio'; location.hash = '#showdown'; };
     el = $('#openJournalBtn'); if (el) el.onclick = function () { location.hash = '#journal'; };
@@ -924,9 +991,11 @@ function bind(r) {
   if (r.name === 'night') {
     var n = NIGHTS[r.num - 1];
     ensureNightAudio(n).catch(function () {}); // warm the cache; errors surface on play
-    $('#playNightBtn').onclick = function () { playNight(n); };
-    if (audioPlaying === n.id && !audioEl.paused) $('#playNightBtn').textContent = '⏸ Pause';
-    $('#nightShowdownBtn').onclick = function () {
+    el = $('#playNightBtn'); if (el) {
+      el.onclick = function () { playNight(n); };
+      if (audioPlaying === n.id && !audioEl.paused) el.textContent = '⏸ Pause';
+    }
+    el = $('#nightShowdownBtn'); if (el) el.onclick = function () {
       preferredPack = n.id;
       location.hash = '#showdown';
     };
@@ -937,7 +1006,7 @@ function bind(r) {
   }
 
   if (r.name === 'trivia') {
-    $('#packSel').onchange = function (e) { quick.packIdx = parseInt(e.target.value, 10); quick.recent = []; nextQuick(); render(); };
+    $('#packSel').onchange = function (e) { quick.packId = e.target.value; quick.recent = []; nextQuick(); render(); };
     $('#tierSel').onchange = function (e) { quick.tier = e.target.value; quick.recent = []; nextQuick(); render(); };
     el = $('#quickReveal'); if (el) el.onclick = function () { quick.revealed = true; render(); };
     el = $('#quickNext'); if (el) el.onclick = function () { nextQuick(); render(); };
