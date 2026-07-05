@@ -9,6 +9,9 @@ var $ = function (sel) { return document.querySelector(sel); };
 
 var NIGHTS = (window.CORFU && CORFU.nights) || [];
 var QUESTS = (window.CORFU && CORFU.quests) || [];
+var ROAD = window.ROAD || { stories: [], sites: [], finale: null, reverse: [] };
+var ROAD_AUDIO = ROAD.stories.concat(ROAD.finale ? [ROAD.finale] : []);
+var ALL_AUDIO = NIGHTS.concat(ROAD_AUDIO);
 
 /* ---------- State ---------- */
 
@@ -24,7 +27,9 @@ var DEFAULT_STATE = {
   parentLosses: 0,
   nightsDone: {},         // nightId -> true
   questProgress: {},      // questId -> {missions:{}, claimed:false}
-  guestBadges: []         // {name, night, when}
+  guestBadges: [],        // {name, night, when}
+  reverseDone: {},        // promptId -> points awarded
+  finaleDone: false
 };
 
 // Badge ids earned under the pre-artwork scheme map onto the 20-badge set.
@@ -186,21 +191,27 @@ audioEl.addEventListener('ended', function () {
   var b = $('#playNightBtn'); if (b) b.textContent = '▶ Play the story again';
 });
 
-function downloadAllAudio() {
-  var btn = $('#dlAllBtn');
-  if (!navigator.onLine) { if (btn) btn.textContent = 'Needs wifi — try at the villa'; return; }
+function downloadAudioList(list, btn) {
+  if (!navigator.onLine) { if (btn) btn.textContent = 'Needs wifi — try later'; return; }
   var i = 0;
   function next() {
-    if (i >= NIGHTS.length) {
-      if (btn) { btn.textContent = 'All ' + NIGHTS.length + ' voices on this device ✓'; btn.disabled = true; }
+    if (i >= list.length) {
+      if (btn) { btn.textContent = 'All ' + list.length + ' voices on this device ✓'; btn.disabled = true; }
       return;
     }
-    var n = NIGHTS[i];
-    if (btn) btn.textContent = 'Fetching voice ' + (i + 1) + ' of ' + NIGHTS.length + '…';
-    ensureNightAudio(n).then(function () { i++; next(); })
+    if (btn) btn.textContent = 'Fetching voice ' + (i + 1) + ' of ' + list.length + '…';
+    ensureNightAudio(list[i]).then(function () { i++; next(); })
       .catch(function () { i++; next(); }); // skip missing ones, keep going
   }
   next();
+}
+
+function markAudioButton(btn, list) {
+  idbKeys('audio').then(function (keys) {
+    var have = list.filter(function (n) { return keys.indexOf(audioKey(n)) !== -1; }).length;
+    if (have === list.length && list.length) { btn.textContent = 'All ' + have + ' voices on this device ✓'; btn.disabled = true; }
+    else if (have > 0) btn.textContent = btn.textContent.replace(/^Download/, 'Download') + ' (' + have + ' of ' + list.length + ' on device)';
+  });
 }
 
 /* ---------- Badges ---------- */
@@ -343,6 +354,11 @@ function finishShowdown() {
       var b = awardBadge(id, 'family'); if (b) earned.push(b);
     });
   }
+  if (live.packId === 'road-theseus') {
+    var tb = awardBadge('hero-theseus', 'heroes'); if (tb) earned.push(tb);
+  }
+  var isFinale = live.packId === 'finale-sounio';
+  if (isFinale) state.finaleDone = true;
 
   state.scores.heroes += live.heroes;
   state.scores.parents += live.parents;
@@ -359,7 +375,7 @@ function finishShowdown() {
     heroes: live.heroes, parents: live.parents, earned: earned,
     heroesWin: heroesWin, tie: live.heroes === live.parents,
     guests: live.guests || [], night: night ? night.num : null,
-    label: packById(live.packId).title
+    label: packById(live.packId).title, finale: isFinale
   };
   live = null;
   saveLive();
@@ -398,6 +414,16 @@ function paragraphs(text) {
   return text.split('\n\n').map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('');
 }
 
+function questRow(q) {
+  var p = state.questProgress[q.id];
+  var claimed = p && p.claimed;
+  return '<a class="list-row ' + (claimed ? 'done' : '') + '" href="#' + q.id + '">' +
+    '<span class="sym">' + q.symbol + '</span>' +
+    '<span class="grow">' + esc(q.title) + '</span>' +
+    (claimed ? '<span class="ok">✓</span>' : '') +
+    '</a>';
+}
+
 function screenHome() {
   var tonight = tonightNight();
   var nightRows = NIGHTS.map(function (n) {
@@ -409,25 +435,33 @@ function screenHome() {
       (done ? '<span class="ok">✓</span>' : (isTonight ? '<span class="chip-tonight">TONIGHT</span>' : '')) +
       '</a>';
   }).join('');
-  var questRows = QUESTS.map(function (q) {
-    var p = state.questProgress[q.id];
-    var claimed = p && p.claimed;
-    return '<a class="list-row ' + (claimed ? 'done' : '') + '" href="#' + q.id + '">' +
-      '<span class="sym">' + q.symbol + '</span>' +
-      '<span class="grow">' + esc(q.title) + '</span>' +
-      (claimed ? '<span class="ok">✓</span>' : '') +
+  var corfuQuestRows = QUESTS.filter(function (q) { return !q.act; }).map(questRow).join('');
+
+  var storyRows = ROAD.stories.map(function (s) {
+    return '<a class="list-row" href="#roadstory-' + s.num + '">' +
+      '<span class="sym">' + s.symbol + '</span>' +
+      '<span class="grow">Car Story ' + s.num + ': ' + esc(s.title) + '</span>' +
       '</a>';
   }).join('');
+  var roadSites = QUESTS.filter(function (q) { return q.act === 2; });
+  var athensRow = roadSites.length ? questRow(roadSites[0]) : '';
+  var restRows = roadSites.slice(1).map(questRow).join('');
+  var rrDone = Object.keys(state.reverseDone).length;
+  var reverseRow = ROAD.reverse.length
+    ? '<a class="list-row" href="#reverse"><span class="sym">\u{1F501}</span><span class="grow">Reverse Run · the drive back</span>' +
+      (rrDone ? '<span class="ok">' + rrDone + '/' + ROAD.reverse.length + '</span>' : '<span class="chip-tonight">2× PTS</span>') + '</a>'
+    : '';
+
+  var finaleRow = ROAD.finale
+    ? '<a class="list-row ' + (state.finaleDone ? 'done' : '') + '" href="#finale">' +
+      '<span class="sym">' + ROAD.finale.symbol + '</span>' +
+      '<span class="grow">The Finale: ' + esc(ROAD.finale.place) + '</span>' +
+      (state.finaleDone ? '<span class="ok">✓</span>' : '') + '</a>'
+    : '';
+
   var tonightLabel = live ? 'Continue the Showdown' : (tonight ? 'Night ' + tonight.num + ': ' + tonight.god : "Tonight's Showdown");
-  var tonightSub = live ? 'A battle is still open' : (tonight ? tonight.title : 'All eight nights complete!');
-  var actsTail = ACTS.slice(1).map(function (act) {
-    return '<div class="card act locked">' +
-      '<span class="node">\u{1F512}</span>' +
-      '<div class="place">' + esc(act.place) + '</div>' +
-      '<h2>' + esc(act.title) + '</h2>' +
-      '<p>' + esc(act.blurb) + '</p>' +
-      '</div>';
-  }).join('');
+  var tonightSub = live ? 'A battle is still open' : (tonight ? tonight.title : 'Pick any pack — the road is open');
+
   return '<h1>The Poseidon Trail</h1>' +
     '<div class="sub">Corfu to Sounio. The sea god is watching.</div>' +
     '<button id="tonightBtn">' + esc(tonightLabel) + '<small>' + esc(tonightSub) + '</small></button>' +
@@ -437,17 +471,29 @@ function screenHome() {
     '<div class="place">' + esc(ACTS[0].place) + '</div>' +
     '<h2>' + esc(ACTS[0].title) + '</h2>' +
     '<div class="rowlist">' + nightRows + '</div>' +
-    '<button id="dlAllBtn" class="ghost" style="margin-top:12px;min-height:48px;font-size:15px">Download all 8 story voices for offline</button>' +
+    '<button id="dlAllBtn" class="ghost" style="margin-top:12px;min-height:48px;font-size:15px">Download the 8 Corfu voices</button>' +
     '</div>' +
     '<div class="card act unlocked">' +
     '<span class="node">\u{1F3F9}</span>' +
     '<div class="place">Corfu missions</div>' +
     '<h2>Quests</h2>' +
-    '<div class="rowlist">' + questRows + '</div>' +
+    '<div class="rowlist">' + corfuQuestRows + '</div>' +
     '</div>' +
-    actsTail +
+    '<div class="card act unlocked">' +
+    '<span class="node">' + ACTS[1].node + '</span>' +
+    '<div class="place">' + esc(ACTS[1].place) + '</div>' +
+    '<h2>' + esc(ACTS[1].title) + '</h2>' +
+    '<div class="rowlist">' + athensRow + storyRows + restRows + reverseRow + '</div>' +
+    '<button id="dlRoadBtn" class="ghost" style="margin-top:12px;min-height:48px;font-size:15px">Download the 4 road voices</button>' +
     '</div>' +
-    '<div class="foot">Act I: the Corfu pack · the road pack sails in next</div>';
+    '<div class="card act unlocked">' +
+    '<span class="node">' + ACTS[2].node + '</span>' +
+    '<div class="place">' + esc(ACTS[2].place) + '</div>' +
+    '<h2>' + esc(ACTS[2].title) + '</h2>' +
+    '<div class="rowlist">' + finaleRow + '</div>' +
+    '</div>' +
+    '</div>' +
+    '<div class="foot">The whole trail is on this device. No signal required.</div>';
 }
 
 function screenNight(num) {
@@ -469,7 +515,40 @@ function screenQuest(qid) {
   if (!q) { location.hash = '#home'; return ''; }
   var p = state.questProgress[q.id] || { missions: {}, claimed: false };
   var allDone = q.missions.every(function (m) { return p.missions[m.id]; });
-  var rows = q.missions.map(function (m) {
+  var rows = missionRows(q, p);
+  var claim = p.claimed
+    ? '<div class="status ok" style="text-align:center">Quest complete: +' + q.points + ' points banked' + (q.badgeId ? ', badge earned' : '') + '. \u{1F3C5}</div>'
+    : (allDone
+      ? '<button id="claimBtn" class="gold">Claim +' + q.points + ' Hero points' + (q.badgeId ? ' & the ' + esc(q.badgeName) + ' badge' : '') + '</button>'
+      : '<div class="status" style="text-align:center;opacity:.7">Finish every mission to claim +' + q.points + ' points.</div>');
+  return '<div class="place">' + esc(q.place) + '</div>' +
+    '<h1>' + esc(q.title) + '</h1>' +
+    '<div class="sub story-font">' + esc(q.intro) + '</div>' +
+    rows + claim +
+    (q.questions.length ? '<div class="foot">This quest’s trivia appears in the Showdown pack list once you’ve been here.</div>' : '') +
+    '<button class="ghost" id="backHomeBtn" style="margin-top:14px">Back to the trail</button>';
+}
+
+function screenRoadStory(num) {
+  var s = ROAD.stories[num - 1];
+  if (!s) { location.hash = '#home'; return ''; }
+  var isLast = num === ROAD.stories.length;
+  var nav = '';
+  if (num > 1) nav += '<button class="ghost" id="prevStoryBtn" style="margin-top:10px">◀ Chapter ' + (num - 1) + '</button>';
+  if (!isLast) nav += '<button id="nextStoryBtn" style="margin-top:10px">Chapter ' + (num + 1) + ' ▶</button>';
+  return '<div class="place">Theseus’s Road · chapter ' + num + ' of ' + ROAD.stories.length + '</div>' +
+    '<h1>' + esc(s.title) + '</h1>' +
+    '<div class="sub">A car story. Listen on the drive, or read along.</div>' +
+    '<button id="playNightBtn" class="gold">▶ Play the story</button>' +
+    '<div class="status" id="audioStatus" style="margin:10px 0 4px;font-size:14px"></div>' +
+    '<div class="card"><div class="story-read">' + paragraphs(s.story) + '</div></div>' +
+    (isLast ? '<button id="roadShowdownBtn">Start the Road Showdown</button>' : '') +
+    nav +
+    '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
+}
+
+function missionRows(q, p) {
+  return q.missions.map(function (m) {
     var done = !!p.missions[m.id];
     var control;
     if (m.type === 'photo') {
@@ -486,17 +565,82 @@ function screenQuest(qid) {
     }
     return '<div class="mission"><div class="mtext">' + esc(m.text) + '</div>' + control + '</div>';
   }).join('');
+}
+
+function finaleQuestEntity() {
+  return { id: 'finale', title: 'The Finale: Sounio', missions: ROAD.finale.missions, points: ROAD.finale.points, badgeId: null };
+}
+
+function screenFinale() {
+  var f = ROAD.finale;
+  if (!f) { location.hash = '#home'; return ''; }
+  var p = state.questProgress.finale || { missions: {}, claimed: false };
+  var allDone = f.missions.every(function (m) { return p.missions[m.id]; });
+  var banner = state.finaleDone
+    ? '<div class="card trail-complete"><img class="badge-img" src="assets/badges/badge-poseidon.svg" alt="Poseidon">' +
+      '<h2>THE TRAIL IS COMPLETE</h2><div class="rules">Heroes ' + state.scores.heroes + ' — ' + state.scores.parents + ' Parents. The sea god is satisfied. Open the Journal: the whole adventure is written.</div>' +
+      '<button id="openJournalBtn" class="gold" style="margin-top:12px">Open the Journal</button></div>'
+    : '';
   var claim = p.claimed
-    ? '<div class="status ok" style="text-align:center">Quest complete: +' + q.points + ' points banked' + (q.badgeId ? ', badge earned' : '') + '. \u{1F3C5}</div>'
+    ? '<div class="status ok" style="text-align:center">Finale missions complete: +' + f.points + ' points banked. \u{1F531}</div>'
     : (allDone
-      ? '<button id="claimBtn" class="gold">Claim +' + q.points + ' Hero points' + (q.badgeId ? ' & the ' + esc(q.badgeName) + ' badge' : '') + '</button>'
-      : '<div class="status" style="text-align:center;opacity:.7">Finish every mission to claim +' + q.points + ' points.</div>');
-  return '<div class="place">' + esc(q.place) + '</div>' +
-    '<h1>' + esc(q.title) + '</h1>' +
-    '<div class="sub story-font">' + esc(q.intro) + '</div>' +
-    rows + claim +
-    (q.questions.length ? '<div class="foot">This quest’s trivia appears in the Showdown pack list once you’ve been here.</div>' : '') +
-    '<button class="ghost" id="backHomeBtn" style="margin-top:14px">Back to the trail</button>';
+      ? '<button id="claimBtn" class="gold">Claim +' + f.points + ' Hero points</button>'
+      : '<div class="status" style="text-align:center;opacity:.7">Finish every mission to claim +' + f.points + ' points.</div>');
+  return '<div class="place">Act III · ' + esc(f.place) + '</div>' +
+    '<h1>' + esc(f.title) + '</h1>' +
+    banner +
+    '<button id="playNightBtn" class="gold">▶ Play the finale story</button>' +
+    '<div class="status" id="audioStatus" style="margin:10px 0 4px;font-size:14px"></div>' +
+    '<div class="card"><div class="story-read">' + paragraphs(f.story) + '</div></div>' +
+    missionRows(f, p) + claim +
+    '<button id="finaleShowdownBtn" style="margin-top:14px">' + (state.finaleDone ? 'Replay the Final Showdown' : '⚡ THE FINAL SHOWDOWN ⚡') + '</button>' +
+    '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
+}
+
+function screenReverse() {
+  var total = ROAD.reverse.length;
+  var done = Object.keys(state.reverseDone).length;
+  var cards = ROAD.reverse.map(function (rr) {
+    var earned = state.reverseDone[rr.id];
+    var controls = earned
+      ? '<div class="status ok" style="text-align:center">Retold! +' + earned + ' banked</div>'
+      : '<div class="answer-row">' +
+        '<button class="gold rr-btn" data-rr="' + rr.id + '" data-pts="20">Full retelling +20</button>' +
+        '<button class="ghost rr-btn" data-rr="' + rr.id + '" data-pts="10">With help +10</button></div>';
+    return '<div class="card rr-card' + (earned ? ' done' : '') + '">' +
+      '<div class="place">' + esc(rr.where) + '</div>' +
+      '<div class="rr-name">' + rr.symbol + ' ' + esc(rr.name) + '</div>' +
+      '<div class="rules" style="text-align:center">' + esc(rr.hint) + '</div>' +
+      controls + '</div>';
+  }).join('');
+  return '<div class="place">The drive back · Jul 23</div>' +
+    '<h1>Reverse Run</h1>' +
+    '<div class="sub">You’re driving Theseus’s road in reverse. At each landmark, a Hero retells the story in their own words — the app only gives the name. Full retelling in your own words scores DOUBLE (' + done + '/' + total + ' done).</div>' +
+    cards +
+    '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
+}
+
+function screenJournal() {
+  var earned = BADGES.filter(function (b) { return state.badges[b.id]; });
+  var badgesHtml = earned.length
+    ? '<div class="badge-grid">' + earned.map(function (b) {
+        return '<div class="badge earned">' + badgeArt(b) + '<span class="name">' + esc(b.name) + '</span></div>';
+      }).join('') + '</div>'
+    : '<div class="rules">No badges yet. The gods are waiting.</div>';
+  var timeline = state.history.length
+    ? state.history.slice().reverse().map(function (h) {
+        var d = new Date(h.when);
+        var pts = [];
+        if (h.heroes) pts.push('<span class="h-heroes">Heroes +' + h.heroes + '</span>');
+        if (h.parents) pts.push('<span class="h-parents">Parents +' + h.parents + '</span>');
+        return '<div>' + (d.getMonth() + 1) + '/' + d.getDate() + ' · ' + esc(h.label) + (pts.length ? ' · ' + pts.join(' / ') : '') + '</div>';
+      }).join('')
+    : '<div>The journal writes itself as you play.</div>';
+  return '<h1>The Book of the Trail</h1>' +
+    '<div class="sub">Heroes ' + state.scores.heroes + ' — ' + state.scores.parents + ' Parents · the souvenir builds itself.</div>' +
+    '<div class="card"><h2>Quest photos</h2><div class="journal-grid" id="journalPhotos"><div class="rules">Loading photos…</div></div></div>' +
+    '<div class="card"><h2>Badges earned</h2>' + badgesHtml + '</div>' +
+    '<div class="card"><h2>The story so far</h2><div class="history">' + timeline + '</div></div>';
 }
 
 function badgeArt(b) {
@@ -589,6 +733,21 @@ function ceremonyScreen() {
   var trophy = result.tie ? '⚖️' : (result.heroesWin ? '\u{1F3C6}' : '\u{1F3DB}');
   var headline = result.tie ? 'A draw. Poseidon demands a rematch.' :
     (result.heroesWin ? 'The Heroes take the night!' : 'The Parents hold the line!');
+  if (result.finale) {
+    trophy = '<img class="badge-img" src="assets/badges/badge-poseidon.svg" alt="Poseidon" style="width:120px;height:120px">';
+    headline = 'THE TRAIL IS COMPLETE';
+    return '<div class="ceremony">' +
+      '<div class="trophy">' + trophy + '</div>' +
+      '<h1>' + headline + '</h1>' +
+      '<div class="final">Heroes ' + result.heroes + ' — ' + result.parents + ' Parents tonight</div>' +
+      '<div class="rules">From a stone ship in Corfu to the temple of the sea god. Twelve gods know your names. The Earth-Shaker is satisfied.</div>' +
+      (result.earned.length ? '<h2 style="margin-top:14px">New badges</h2><div>' + result.earned.map(function (b) {
+        return '<span class="newbadge">' + badgeArt(b) + '<span class="name">' + esc(b.name) + '</span></span>';
+      }).join('') + '</div>' : '') +
+      '<button id="sdJournal" class="gold" style="margin-top:24px">Open the Journal</button>' +
+      '<button id="sdDone" class="ghost" style="margin-top:10px">Back to the trail</button>' +
+      '</div>';
+  }
   var badgesHtml = result.earned.map(function (b) {
     return '<span class="newbadge">' + badgeArt(b) + '<span class="name">' + esc(b.name) + '</span></span>';
   }).join('');
@@ -656,11 +815,12 @@ function screenShowdown() {
 
 /* ---------- Router ---------- */
 
-var SCREENS = { home: screenHome, trivia: screenTrivia, badges: screenBadges, scores: screenScores, showdown: screenShowdown };
+var SCREENS = { home: screenHome, trivia: screenTrivia, badges: screenBadges, scores: screenScores, showdown: screenShowdown, journal: screenJournal, reverse: screenReverse, finale: screenFinale };
 
 function route() {
   var h = (location.hash || '#home').slice(1);
   if (/^night-\d+$/.test(h)) return { name: 'night', num: parseInt(h.slice(6), 10) };
+  if (/^roadstory-\d+$/.test(h)) return { name: 'roadstory', num: parseInt(h.slice(10), 10) };
   if (questById(h)) return { name: 'quest', id: h };
   return { name: SCREENS[h] ? h : 'home' };
 }
@@ -669,11 +829,13 @@ function render() {
   var r = route();
   var html;
   if (r.name === 'night') html = screenNight(r.num);
+  else if (r.name === 'roadstory') html = screenRoadStory(r.num);
   else if (r.name === 'quest') html = screenQuest(r.id);
   else html = SCREENS[r.name]();
   $('#screen').innerHTML = html;
+  var homeish = ['night', 'roadstory', 'quest', 'reverse', 'finale'];
   document.querySelectorAll('#tabbar a').forEach(function (a) {
-    a.classList.toggle('active', a.dataset.tab === r.name || (r.name === 'night' && a.dataset.tab === 'home') || (r.name === 'quest' && a.dataset.tab === 'home'));
+    a.classList.toggle('active', a.dataset.tab === r.name || (homeish.indexOf(r.name) !== -1 && a.dataset.tab === 'home'));
   });
   window.scrollTo(0, 0);
   bind(r);
@@ -691,13 +853,72 @@ function bind(r) {
       location.hash = tonight ? '#night-' + tonight.num : '#showdown';
     };
     el = $('#dlAllBtn'); if (el) {
-      el.onclick = downloadAllAudio;
-      idbKeys('audio').then(function (keys) {
-        var have = NIGHTS.filter(function (n) { return keys.indexOf(audioKey(n)) !== -1; }).length;
-        if (have === NIGHTS.length && NIGHTS.length) { el.textContent = 'All ' + have + ' voices on this device ✓'; el.disabled = true; }
-        else if (have > 0) el.textContent = 'Download story voices (' + have + ' of ' + NIGHTS.length + ' on device)';
-      });
+      (function (btn) { btn.onclick = function () { downloadAudioList(NIGHTS, btn); }; markAudioButton(btn, NIGHTS); })(el);
     }
+    el = $('#dlRoadBtn'); if (el) {
+      (function (btn) { btn.onclick = function () { downloadAudioList(ROAD_AUDIO, btn); }; markAudioButton(btn, ROAD_AUDIO); })(el);
+    }
+  }
+
+  if (r.name === 'roadstory') {
+    var rs = ROAD.stories[r.num - 1];
+    ensureNightAudio(rs).catch(function () {});
+    $('#playNightBtn').onclick = function () { playNight(rs); };
+    if (audioPlaying === rs.id && !audioEl.paused) $('#playNightBtn').textContent = '⏸ Pause';
+    el = $('#roadShowdownBtn'); if (el) el.onclick = function () { preferredPack = 'road-theseus'; location.hash = '#showdown'; };
+    el = $('#prevStoryBtn'); if (el) el.onclick = function () { location.hash = '#roadstory-' + (r.num - 1); };
+    el = $('#nextStoryBtn'); if (el) el.onclick = function () { location.hash = '#roadstory-' + (r.num + 1); };
+  }
+
+  if (r.name === 'finale' && ROAD.finale) {
+    ensureNightAudio(ROAD.finale).catch(function () {});
+    $('#playNightBtn').onclick = function () { playNight(ROAD.finale); };
+    if (audioPlaying === ROAD.finale.id && !audioEl.paused) $('#playNightBtn').textContent = '⏸ Pause';
+    bindQuestControls(finaleQuestEntity());
+    el = $('#finaleShowdownBtn'); if (el) el.onclick = function () { preferredPack = 'finale-sounio'; location.hash = '#showdown'; };
+    el = $('#openJournalBtn'); if (el) el.onclick = function () { location.hash = '#journal'; };
+  }
+
+  if (r.name === 'reverse') {
+    document.querySelectorAll('.rr-btn').forEach(function (btn) {
+      btn.onclick = function () {
+        var id = btn.dataset.rr;
+        var pts = parseInt(btn.dataset.pts, 10);
+        var rr = null;
+        ROAD.reverse.forEach(function (x) { if (x.id === id) rr = x; });
+        if (!rr || state.reverseDone[id]) return;
+        state.reverseDone[id] = pts;
+        state.scores.heroes += pts;
+        state.history.unshift({ when: new Date().toISOString(), label: 'Reverse Run: ' + rr.name, heroes: pts, parents: 0 });
+        saveState(); render();
+      };
+    });
+  }
+
+  if (r.name === 'journal') {
+    idbKeys('photos').then(function (keys) {
+      var holder = $('#journalPhotos');
+      if (!holder) return;
+      if (!keys.length) { holder.innerHTML = '<div class="rules">No quest photos yet. The camera missions are waiting.</div>'; return; }
+      holder.innerHTML = '';
+      var owners = QUESTS.slice();
+      if (ROAD.finale) owners.push({ id: 'finale', title: ROAD.finale.title });
+      keys.forEach(function (key) {
+        var owner = null;
+        owners.forEach(function (q) { if (key.indexOf(q.id + '-') === 0) owner = q; });
+        idbGet('photos', key).then(function (blob) {
+          if (!blob) return;
+          var fig = document.createElement('figure');
+          fig.className = 'journal-photo';
+          var img = document.createElement('img');
+          img.src = URL.createObjectURL(blob);
+          var cap = document.createElement('figcaption');
+          cap.textContent = owner ? owner.title : 'Quest photo';
+          fig.appendChild(img); fig.appendChild(cap);
+          holder.appendChild(fig);
+        });
+      });
+    });
   }
 
   if (r.name === 'night') {
@@ -712,42 +933,7 @@ function bind(r) {
   }
 
   if (r.name === 'quest') {
-    var q = questById(r.id);
-    var p = state.questProgress[q.id] || { missions: {}, claimed: false };
-    state.questProgress[q.id] = p;
-    document.querySelectorAll('.mission-btn[data-mission]').forEach(function (btn) {
-      btn.onclick = function () {
-        var mid = btn.dataset.mission;
-        p.missions[mid] = !p.missions[mid];
-        saveState(); render();
-      };
-    });
-    document.querySelectorAll('input[type=file][data-mission]').forEach(function (inp) {
-      inp.onchange = function (e) {
-        var f = e.target.files[0]; if (!f) return;
-        var mid = inp.dataset.mission;
-        idbPut('photos', q.id + '-' + mid, f).then(function () {
-          p.missions[mid] = true;
-          saveState(); render();
-        }).catch(function (err) { alert('Photo save failed: ' + err.message); });
-      };
-    });
-    // restore saved photos into their slots
-    q.missions.forEach(function (m) {
-      if (m.type !== 'photo') return;
-      idbGet('photos', q.id + '-' + m.id).then(function (blob) {
-        if (!blob) return;
-        var img = $('#mphoto-' + m.id);
-        if (img) { img.src = URL.createObjectURL(blob); img.style.display = 'block'; }
-      });
-    });
-    el = $('#claimBtn'); if (el) el.onclick = function () {
-      p.claimed = true;
-      state.scores.heroes += q.points;
-      state.history.unshift({ when: new Date().toISOString(), label: q.title, heroes: q.points, parents: 0 });
-      if (q.badgeId) awardBadge(q.badgeId, 'heroes');
-      saveState(); render();
-    };
+    bindQuestControls(questById(r.id));
   }
 
   if (r.name === 'trivia') {
@@ -786,11 +972,11 @@ function bind(r) {
       $('#storageInfo').textContent = 'Storage estimate not available on this device.';
     }
     idbKeys('audio').then(function (keys) {
-      var have = NIGHTS.filter(function (n) { return keys.indexOf(audioKey(n)) !== -1; }).length;
+      var have = ALL_AUDIO.filter(function (n) { return keys.indexOf(audioKey(n)) !== -1; }).length;
       var a = $('#audioInfo');
-      if (a) a.innerHTML = have === NIGHTS.length && NIGHTS.length
+      if (a) a.innerHTML = have === ALL_AUDIO.length && ALL_AUDIO.length
         ? '<span class="ok">All ' + have + ' story voices stored on this device. Airplane-ready.</span>'
-        : have + ' of ' + NIGHTS.length + ' story voices on this device. Use “Download all” on the Trail screen while on wifi.';
+        : have + ' of ' + ALL_AUDIO.length + ' story voices on this device. Use the download buttons on the Trail screen while on wifi.';
     });
   }
 
@@ -806,6 +992,7 @@ function bind(r) {
         };
       });
       el = $('#sdDone'); if (el) el.onclick = function () { ceremony = null; preferredPack = null; location.hash = '#home'; };
+      el = $('#sdJournal'); if (el) el.onclick = function () { ceremony = null; preferredPack = null; location.hash = '#journal'; };
       return;
     }
     el = $('#sdFull'); if (el) el.onclick = function () { startShowdown($('#sdPack').value, null, parseGuests()); };
@@ -819,6 +1006,45 @@ function bind(r) {
       }
     };
   }
+}
+
+// Mission checklist, photo capture, and claim wiring shared by quests and the finale.
+function bindQuestControls(q) {
+  var p = state.questProgress[q.id] || { missions: {}, claimed: false };
+  state.questProgress[q.id] = p;
+  document.querySelectorAll('.mission-btn[data-mission]').forEach(function (btn) {
+    btn.onclick = function () {
+      var mid = btn.dataset.mission;
+      p.missions[mid] = !p.missions[mid];
+      saveState(); render();
+    };
+  });
+  document.querySelectorAll('input[type=file][data-mission]').forEach(function (inp) {
+    inp.onchange = function (e) {
+      var f = e.target.files[0]; if (!f) return;
+      var mid = inp.dataset.mission;
+      idbPut('photos', q.id + '-' + mid, f).then(function () {
+        p.missions[mid] = true;
+        saveState(); render();
+      }).catch(function (err) { alert('Photo save failed: ' + err.message); });
+    };
+  });
+  q.missions.forEach(function (m) {
+    if (m.type !== 'photo') return;
+    idbGet('photos', q.id + '-' + m.id).then(function (blob) {
+      if (!blob) return;
+      var img = $('#mphoto-' + m.id);
+      if (img) { img.src = URL.createObjectURL(blob); img.style.display = 'block'; }
+    });
+  });
+  var claimEl = $('#claimBtn');
+  if (claimEl) claimEl.onclick = function () {
+    p.claimed = true;
+    state.scores.heroes += q.points;
+    state.history.unshift({ when: new Date().toISOString(), label: q.title, heroes: q.points, parents: 0 });
+    if (q.badgeId) awardBadge(q.badgeId, 'heroes');
+    saveState(); render();
+  };
 }
 
 function parseGuests() {
