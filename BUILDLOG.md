@@ -35,3 +35,9 @@ GitHub Pages legacy builds occasionally hang; kick with `gh api repos/shroi11/po
 5. Optional: the boys' one-time app rename; post-trip journal print from the iPad.
 
 **Win condition (PRD):** by Corfu night 3, a boy asks to play unprompted.
+
+## Hotfix: July 5, 2026 (evening)
+
+- **Bug:** audio playback failed ("object store not found") on devices that ran the Phase 0 spike. The spike created the shared `ptrail` IndexedDB at v1 with only the `photos` store, so the app (also opening v1) never created its `audio` store on those devices.
+- **Fix:** `DB_VERSION` 1 -> 2 in app.js; the upgrade hook adds the missing store, photos preserved. SW v10. Reproduced spike-then-app in preview before and after.
+- **Side effect:** the retired spike page at `/phase0-spike/` will now error on its photo test on upgraded devices (it opens the DB at the old version). Expected; the spike is done — remove its home-screen icon.
