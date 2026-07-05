@@ -77,7 +77,10 @@ function updateStrip() {
 
 /* ---------- IndexedDB: photos + audio packs ---------- */
 
-var DB_NAME = 'ptrail', DB_VERSION = 1;
+// v2: devices that ran the Phase 0 spike have this DB at v1 with only the
+// 'photos' store (the spike created it first). The bump re-fires the upgrade
+// hook so the 'audio' store gets added; existing photos are untouched.
+var DB_NAME = 'ptrail', DB_VERSION = 2;
 function openDb() {
   return new Promise(function (res, rej) {
     var r = indexedDB.open(DB_NAME, DB_VERSION);
