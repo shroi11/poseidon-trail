@@ -1,4 +1,10 @@
-const CACHE = 'ptrail-app-v2';
+const CACHE = 'ptrail-app-v3';
+const BADGE_NAMES = [
+  'poseidon', 'zeus', 'athena', 'hermes', 'apollo', 'artemis', 'hera', 'ares',
+  'hephaestus', 'aphrodite', 'demeter', 'dionysus',
+  'odysseus', 'achilles', 'theseus', 'hercules', 'perseus', 'asclepius',
+  'guest', 'pantheon'
+];
 const ASSETS = [
   './',
   'index.html',
@@ -8,7 +14,8 @@ const ASSETS = [
   'js/app.js',
   'manifest.json',
   'icons/icon-180.png',
-  'icons/icon-512.png'
+  'icons/icon-512.png',
+  ...BADGE_NAMES.map(n => 'assets/badges/badge-' + n + '.svg')
 ];
 
 self.addEventListener('install', e => {

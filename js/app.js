@@ -16,7 +16,7 @@ var STATE_KEY = 'ptrail-state-v1';
 var LIVE_KEY = 'ptrail-showdown-live-v1';
 
 var DEFAULT_STATE = {
-  version: 2,
+  version: 3,
   scores: { heroes: 0, parents: 0 },
   history: [],            // {when, label, heroes, parents}
   badges: {},             // badgeId -> {when, by}
@@ -27,12 +27,28 @@ var DEFAULT_STATE = {
   guestBadges: []         // {name, night, when}
 };
 
+// Badge ids earned under the pre-artwork scheme map onto the 20-badge set.
+var BADGE_MIGRATION = {
+  god1: ['god-poseidon'], god2: ['god-zeus'], god3: ['god-athena'], god4: ['god-hermes'],
+  god5: ['god-apollo', 'god-artemis'], god6: ['god-hera', 'god-ares'],
+  god7: ['god-hephaestus', 'god-aphrodite'], god8: ['god-demeter', 'god-dionysus'],
+  'qbadge-mouse': ['hero-odysseus'], 'qbadge-achilleion': ['hero-achilles']
+};
+
 function loadState() {
   try {
     var raw = localStorage.getItem(STATE_KEY);
     if (!raw) return JSON.parse(JSON.stringify(DEFAULT_STATE));
     var s = JSON.parse(raw);
     for (var k in DEFAULT_STATE) if (!(k in s)) s[k] = JSON.parse(JSON.stringify(DEFAULT_STATE[k]));
+    if (s.version < 3) {
+      var migrated = {};
+      Object.keys(s.badges).forEach(function (id) {
+        (BADGE_MIGRATION[id] || []).forEach(function (nid) { migrated[nid] = s.badges[id]; });
+      });
+      s.badges = migrated;
+      s.version = 3;
+    }
     return s;
   } catch (e) {
     return JSON.parse(JSON.stringify(DEFAULT_STATE));
@@ -40,6 +56,7 @@ function loadState() {
 }
 
 var state = loadState();
+localStorage.setItem(STATE_KEY, JSON.stringify(state)); // persist migrations immediately
 
 function saveState() {
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
@@ -102,10 +119,24 @@ var audioEl = new Audio();
 var audioUrls = {};      // nightId -> object URL (this session)
 var audioPlaying = null; // nightId currently playing
 
+// Bump when narrations are re-recorded: stale IndexedDB copies are dropped
+// and devices re-fetch the new voice on their next wifi contact.
+var AUDIO_VER = 2;
+function audioKey(night) { return night.id + '@v' + AUDIO_VER; }
+
+// Drop narration blobs from older voices so storage doesn't hold both.
+idbKeys('audio').then(function (keys) {
+  keys.forEach(function (k) {
+    if (k.indexOf('@v' + AUDIO_VER) === -1) {
+      openDb().then(function (d) { d.transaction('audio', 'readwrite').objectStore('audio').delete(k); });
+    }
+  });
+});
+
 // Get a playable URL for a night's narration: memory -> IndexedDB -> network (then stored).
 function ensureNightAudio(night) {
   if (audioUrls[night.id]) return Promise.resolve(audioUrls[night.id]);
-  return idbGet('audio', night.id).then(function (blob) {
+  return idbGet('audio', audioKey(night)).then(function (blob) {
     if (blob) {
       audioUrls[night.id] = URL.createObjectURL(blob);
       return audioUrls[night.id];
@@ -115,7 +146,7 @@ function ensureNightAudio(night) {
       if (!r.ok) throw new Error('missing');
       return r.blob();
     }).then(function (b) {
-      return idbPut('audio', night.id, b).then(function () {
+      return idbPut('audio', audioKey(night), b).then(function () {
         audioUrls[night.id] = URL.createObjectURL(b);
         return audioUrls[night.id];
       });
@@ -186,12 +217,14 @@ function awardBadge(id, by) {
   return badgeById(id);
 }
 
-function checkTotalBadges() {
-  var earned = [];
-  var b;
-  if (state.scores.heroes >= 100) { b = awardBadge('trident', 'heroes'); if (b) earned.push(b); }
-  if (state.parentLosses >= 3) { b = awardBadge('titan', 'heroes'); if (b) earned.push(b); }
-  return earned;
+// The Pantheon badge unlocks when all 12 god badges are in the collection.
+function checkPantheon() {
+  var allGods = BADGES.every(function (b) {
+    return b.id.indexOf('god-') !== 0 || state.badges[b.id];
+  });
+  if (!allGods) return [];
+  var b = awardBadge('pantheon', 'family');
+  return b ? [b] : [];
 }
 
 /* ---------- Night helpers ---------- */
@@ -298,28 +331,22 @@ function answerShowdown(gotIt) {
 
 function finishShowdown() {
   var earned = [];
-  var b;
   state.showdownsPlayed++;
-  b = awardBadge('spark'); if (b) earned.push(b);
   var heroesWin = live.heroes > live.parents;
-  if (heroesWin) {
-    state.parentLosses++;
-    b = awardBadge('nike', 'heroes'); if (b) earned.push(b);
-  }
-  if (live.heroesMaxStreak >= 3) { b = awardBadge('streak3', 'heroes'); if (b) earned.push(b); }
-  if (live.heroesAsked > 0 && live.heroesMiss === 0) { b = awardBadge('owl', 'heroes'); if (b) earned.push(b); }
-  else if (live.parentsAsked > 0 && live.parentsMiss === 0) { b = awardBadge('owl', 'parents'); if (b) earned.push(b); }
+  if (heroesWin) state.parentLosses++;
 
-  // Night showdowns close the night and mint the god badge.
+  // Night showdowns close the night and mint its god badge(s).
   var night = nightById(live.packId);
   if (night) {
     state.nightsDone[night.id] = true;
-    b = awardBadge(night.badgeId, 'family'); if (b) earned.push(b);
+    night.badges.forEach(function (id) {
+      var b = awardBadge(id, 'family'); if (b) earned.push(b);
+    });
   }
 
   state.scores.heroes += live.heroes;
   state.scores.parents += live.parents;
-  earned = earned.concat(checkTotalBadges());
+  earned = earned.concat(checkPantheon());
   state.history.unshift({
     when: new Date().toISOString(),
     label: packById(live.packId).title,
@@ -460,9 +487,9 @@ function screenQuest(qid) {
     return '<div class="mission"><div class="mtext">' + esc(m.text) + '</div>' + control + '</div>';
   }).join('');
   var claim = p.claimed
-    ? '<div class="status ok" style="text-align:center">Quest complete: +' + q.points + ' points banked, badge earned. \u{1F3C5}</div>'
+    ? '<div class="status ok" style="text-align:center">Quest complete: +' + q.points + ' points banked' + (q.badgeId ? ', badge earned' : '') + '. \u{1F3C5}</div>'
     : (allDone
-      ? '<button id="claimBtn" class="gold">Claim +' + q.points + ' Hero points & the ' + esc(q.badgeName) + ' badge</button>'
+      ? '<button id="claimBtn" class="gold">Claim +' + q.points + ' Hero points' + (q.badgeId ? ' & the ' + esc(q.badgeName) + ' badge' : '') + '</button>'
       : '<div class="status" style="text-align:center;opacity:.7">Finish every mission to claim +' + q.points + ' points.</div>');
   return '<div class="place">' + esc(q.place) + '</div>' +
     '<h1>' + esc(q.title) + '</h1>' +
@@ -472,20 +499,26 @@ function screenQuest(qid) {
     '<button class="ghost" id="backHomeBtn" style="margin-top:14px">Back to the trail</button>';
 }
 
+function badgeArt(b) {
+  return b.img
+    ? '<img class="badge-img" src="' + b.img + '" alt="' + esc(b.name) + '">'
+    : '<span class="art">' + b.art + '</span>';
+}
+
 function screenBadges() {
   var html = BADGES.map(function (b) {
     var e = state.badges[b.id];
-    var cls = b.sealed ? 'locked' : (e ? 'earned' : 'locked');
-    return '<div class="badge ' + cls + (b.god ? ' medal' : '') + '">' +
-      '<span class="art">' + b.art + '</span>' +
+    var cls = e ? 'earned' : 'locked';
+    return '<div class="badge ' + cls + '">' +
+      badgeArt(b) +
       '<span class="name">' + esc(b.name) + '</span>' +
-      '<span class="how">' + esc(e && !b.sealed ? 'Earned!' : b.how) + '</span>' +
+      '<span class="how">' + esc(e ? 'Earned!' : b.how) + '</span>' +
       '</div>';
   }).join('');
   var guests = state.guestBadges.length
     ? '<h2 style="margin-top:20px">Guest Heroes</h2><div class="card history">' +
       state.guestBadges.map(function (g) {
-        return '<div>⭐ <b>' + esc(g.name) + '</b> · guest badge, night ' + g.night + '</div>';
+        return '<div class="guest-row"><img class="guest-img" src="' + window.GUEST_BADGE_IMG + '" alt="guest badge"> <b>' + esc(g.name) + '</b> · guest badge, night ' + g.night + '</div>';
       }).join('') + '</div>'
     : '';
   return '<h1>Badges</h1><div class="sub">The trip journal builds itself. Collect them all.</div>' +
@@ -557,7 +590,7 @@ function ceremonyScreen() {
   var headline = result.tie ? 'A draw. Poseidon demands a rematch.' :
     (result.heroesWin ? 'The Heroes take the night!' : 'The Parents hold the line!');
   var badgesHtml = result.earned.map(function (b) {
-    return '<span class="newbadge"><span class="art">' + b.art + '</span><span class="name">' + esc(b.name) + '</span></span>';
+    return '<span class="newbadge">' + badgeArt(b) + '<span class="name">' + esc(b.name) + '</span></span>';
   }).join('');
   var guestsHtml = '';
   if (result.guests.length && !result.guestsAwarded) {
@@ -660,7 +693,7 @@ function bind(r) {
     el = $('#dlAllBtn'); if (el) {
       el.onclick = downloadAllAudio;
       idbKeys('audio').then(function (keys) {
-        var have = NIGHTS.filter(function (n) { return keys.indexOf(n.id) !== -1; }).length;
+        var have = NIGHTS.filter(function (n) { return keys.indexOf(audioKey(n)) !== -1; }).length;
         if (have === NIGHTS.length && NIGHTS.length) { el.textContent = 'All ' + have + ' voices on this device ✓'; el.disabled = true; }
         else if (have > 0) el.textContent = 'Download story voices (' + have + ' of ' + NIGHTS.length + ' on device)';
       });
@@ -712,8 +745,7 @@ function bind(r) {
       p.claimed = true;
       state.scores.heroes += q.points;
       state.history.unshift({ when: new Date().toISOString(), label: q.title, heroes: q.points, parents: 0 });
-      awardBadge(q.badgeId, 'heroes');
-      checkTotalBadges();
+      if (q.badgeId) awardBadge(q.badgeId, 'heroes');
       saveState(); render();
     };
   }
@@ -733,7 +765,6 @@ function bind(r) {
       if (!pts || pts < 1) { $('#ptsMsg').innerHTML = '<span class="bad">Enter the points first.</span>'; return; }
       state.scores[team] += pts;
       state.history.unshift({ when: new Date().toISOString(), label: note, heroes: team === 'heroes' ? pts : 0, parents: team === 'parents' ? pts : 0 });
-      checkTotalBadges();
       saveState();
       render();
     };
@@ -755,7 +786,7 @@ function bind(r) {
       $('#storageInfo').textContent = 'Storage estimate not available on this device.';
     }
     idbKeys('audio').then(function (keys) {
-      var have = NIGHTS.filter(function (n) { return keys.indexOf(n.id) !== -1; }).length;
+      var have = NIGHTS.filter(function (n) { return keys.indexOf(audioKey(n)) !== -1; }).length;
       var a = $('#audioInfo');
       if (a) a.innerHTML = have === NIGHTS.length && NIGHTS.length
         ? '<span class="ok">All ' + have + ' story voices stored on this device. Airplane-ready.</span>'

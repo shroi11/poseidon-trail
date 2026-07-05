@@ -25,18 +25,8 @@ const ACTS = [
   }
 ];
 
-const BADGES = [
-  { id: 'spark',   art: '⚡',      name: 'First Spark',     how: 'Play your first Showdown' },
-  { id: 'nike',    art: '\u{1F3C6}',   name: 'Winged Victory',  how: 'Heroes win a Showdown night' },
-  { id: 'streak3', art: '\u{1F525}',   name: 'Hot Streak',      how: '3 right answers in a row in one Showdown' },
-  { id: 'owl',     art: '\u{1F989}',   name: 'Owl Eyes',        how: 'A perfect Showdown: your team misses nothing' },
-  { id: 'trident', art: '\u{1F531}',   name: 'Trident Bearer',  how: 'Heroes reach 100 total points' },
-  { id: 'titan',   art: '\u{1F3DB}',   name: 'Titan Slayer',    how: 'Parents lose 3 Showdowns' },
-  // Sealed slots: god badges ship with the Corfu pack (Phase 2).
-  { id: 'sealed1', art: '\u{1F512}', name: 'Sealed', how: 'Opens in Corfu', sealed: true },
-  { id: 'sealed2', art: '\u{1F512}', name: 'Sealed', how: 'Opens in Corfu', sealed: true },
-  { id: 'sealed3', art: '\u{1F512}', name: 'Sealed', how: 'Opens on the road', sealed: true }
-];
+// Badge registry. Content packs push in the real set (art: SVGs in assets/badges/).
+const BADGES = [];
 
 // Question packs. tier: 'leo' (6yo) | 'adam' (8yo) | 'parents'.
 // Leo and Adam questions score for the Heroes; parents questions for the Parents.

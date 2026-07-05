@@ -196,10 +196,12 @@ label { display: block; font-size: 14px; opacity: .8; margin-bottom: 6px; }
 .mission-btn.done-btn, label.done-btn { background: #2E8B57; }
 .quest-photo { width: 100%; border-radius: 10px; margin-top: 10px; }
 
-/* God badges: pottery medallion look */
-.badge.medal { background: radial-gradient(circle at 50% 38%, #A0522D 0%, #7B3F20 70%, #5C2E14 100%); }
-.badge.medal.earned { border-color: var(--gold-bright); }
-.badge.medal .name { color: #F7E3C0; }
+/* Badge artwork (SVGs in assets/badges/) */
+.badge-img { width: 68px; height: 68px; display: block; margin: 0 auto; }
+.badge.locked .badge-img { filter: grayscale(1); opacity: .35; }
+.ceremony .newbadge .badge-img { width: 92px; height: 92px; }
+.guest-row { display: flex; align-items: center; gap: 8px; }
+.guest-img { width: 30px; height: 30px; }
 
 .history { font-size: 15px; line-height: 1.7; }
 .history .h-heroes { color: var(--ok); }
