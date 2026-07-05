@@ -109,6 +109,16 @@ function idbGet(store, key) {
     });
   });
 }
+function idbClear(store) {
+  return openDb().then(function (d) {
+    return new Promise(function (res, rej) {
+      var tx = d.transaction(store, 'readwrite');
+      tx.objectStore(store).clear();
+      tx.oncomplete = res;
+      tx.onerror = function () { rej(tx.error); };
+    });
+  });
+}
 function idbKeys(store) {
   return openDb().then(function (d) {
     return new Promise(function (res) {
@@ -1109,12 +1119,13 @@ function bind(r) {
       render();
     };
     $('#resetBtn').onclick = function () {
-      if (confirm('Erase ALL scores, badges, nights and history on this device? Photos and story audio stay. This cannot be undone.')) {
-        localStorage.removeItem(STATE_KEY);
-        localStorage.removeItem(LIVE_KEY);
-        state = loadState(); live = null; ceremony = null;
-        render();
-      }
+      if (!confirm('Erase ALL scores, badges, nights and history on this device? Story audio stays. This cannot be undone.')) return;
+      var wipePhotos = confirm('Also erase all quest photos on this device?\n\nOK = erase photos too (fresh start before the trip)\nCancel = keep the photos');
+      localStorage.removeItem(STATE_KEY);
+      localStorage.removeItem(LIVE_KEY);
+      state = loadState(); live = null; ceremony = null;
+      if (wipePhotos) idbClear('photos').then(render).catch(render);
+      else render();
     };
     if (navigator.storage && navigator.storage.estimate) {
       navigator.storage.estimate().then(function (e) {
