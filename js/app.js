@@ -616,10 +616,13 @@ function screenQuest(qid) {
     : (allDone
       ? '<button id="claimBtn" class="gold">Claim +' + q.points + ' Hero points' + (q.badgeId ? ' & the ' + esc(q.badgeName) + ' badge' : '') + '</button>'
       : '<div class="status" style="text-align:center;opacity:.7">Finish every mission to claim +' + q.points + ' points.</div>');
+  // The toggle only appears on quests that actually have Hebrew (Corfu):
+  // road-trip quests stay English no matter what the toggle says.
+  var hasHe = !!(q.introHe || q.titleHe);
   return '<div class="place">' + esc(q.place) + '</div>' +
     '<h1' + titleClass(q) + '>' + esc(titleOf(q)) + '</h1>' +
     '<div class="sub story-font' + (heOn(q.introHe) ? ' rtl' : '') + '">' + esc(introOf(q)) + '</div>' +
-    langToggle() +
+    (hasHe ? langToggle() : '') +
     rows + claim +
     (q.questions.length ? '<div class="foot">This quest’s trivia appears in the Showdown pack list once you’ve been here.</div>' : '') +
     '<button class="ghost" id="backHomeBtn" style="margin-top:14px">Back to the trail</button>';
@@ -633,20 +636,21 @@ function screenRoadStory(num) {
   if (num > 1) nav += '<button class="ghost" id="prevStoryBtn" style="margin-top:10px">◀ Chapter ' + (num - 1) + '</button>';
   if (!isLast) nav += '<button id="nextStoryBtn" style="margin-top:10px">Chapter ' + (num + 1) + ' ▶</button>';
   return '<div class="place">Theseus’s Road · chapter ' + num + ' of ' + ROAD.stories.length + '</div>' +
-    '<h1' + titleClass(s) + '>' + esc(titleOf(s)) + '</h1>' +
+    '<h1>' + esc(s.title) + '</h1>' +
     '<div class="sub">A car story. Listen on the drive, or read along.</div>' +
-    langToggle() +
     '<button id="playNightBtn" class="gold">▶ Play the story</button>' +
     '<div class="status" id="audioStatus" style="margin:10px 0 4px;font-size:14px"></div>' +
-    '<div class="card"><div class="' + storyClass(s) + '">' + paragraphs(storyBody(s)) + '</div></div>' +
+    '<div class="card"><div class="story-read">' + paragraphs(s.story) + '</div></div>' +
     (isLast ? '<button id="roadShowdownBtn">Start the Road Showdown</button>' : '') +
     nav +
     '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
 }
 
 function missionRows(q, p) {
-  var HE = lang === 'he';
   return q.missions.map(function (m) {
+    // Buttons flip to Hebrew only where the mission itself is translated,
+    // so the untouched road-trip quests stay English whatever the toggle says.
+    var HE = !!heOn(m.textHe);
     var done = !!p.missions[m.id];
     var control;
     if (m.type === 'photo') {
@@ -679,7 +683,7 @@ function screenFinale() {
     return '<div class="place">Act III · ' + esc(f.place) + '</div>' +
       '<h1>\u{1F512} ' + esc(f.title) + '</h1>' +
       '<div class="sub story-font">The end of the trail is sealed until you stand on the cliff at Sounio. The sea god will know if you skip ahead. He always knows.</div>' +
-      '<div class="mission"><div class="mtext' + (heOn(f.missions[0].textHe) ? ' rtl' : '') + '">' + esc(missionTextOf(f.missions[0])) + '</div>' +
+      '<div class="mission"><div class="mtext">' + esc(f.missions[0].text) + '</div>' +
       '<button class="mission-btn" data-mission="m1">\u{1F4CD} We’re here!</button></div>' +
       '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
   }
@@ -695,12 +699,11 @@ function screenFinale() {
       ? '<button id="claimBtn" class="gold">Claim +' + f.points + ' Hero points</button>'
       : '<div class="status" style="text-align:center;opacity:.7">Finish every mission to claim +' + f.points + ' points.</div>');
   return '<div class="place">Act III · ' + esc(f.place) + '</div>' +
-    '<h1' + titleClass(f) + '>' + esc(titleOf(f)) + '</h1>' +
+    '<h1>' + esc(f.title) + '</h1>' +
     banner +
-    langToggle() +
     '<button id="playNightBtn" class="gold">▶ Play the finale story</button>' +
     '<div class="status" id="audioStatus" style="margin:10px 0 4px;font-size:14px"></div>' +
-    '<div class="card"><div class="' + storyClass(f) + '">' + paragraphs(storyBody(f)) + '</div></div>' +
+    '<div class="card"><div class="story-read">' + paragraphs(f.story) + '</div></div>' +
     missionRows(f, p) + claim +
     '<button id="finaleShowdownBtn" style="margin-top:14px">' + (state.finaleDone ? 'Replay the Final Showdown' : '⚡ THE FINAL SHOWDOWN ⚡') + '</button>' +
     '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';

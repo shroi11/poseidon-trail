@@ -1,8 +1,9 @@
-// The Poseidon Trail — the Cousins pack (Phase 5: the trail grows).
-// Three Hebrew-speaking cousins (14, 11 and 9) join the crew: two team quests
-// anyone can run anywhere, plus bonus missions on existing quests. Bonus
-// missions never block a claim. Their trivia is Hebrew, tier 'cousins',
+// The Poseidon Trail — the Cousins pack (Phase 5: Corfu grows).
+// Three Hebrew-speaking cousins (14, 11 and 9) join the crew IN CORFU ONLY:
+// three new Act I quests plus bonus missions on the existing Corfu quests.
+// Bonus missions never block a claim. Their trivia is Hebrew, tier 'cousins',
 // and scores for the Heroes; the stories' Hebrew lives in pack-hebrew.js.
+// The road pack and the Sounio finale are untouched.
 
 (function () {
 'use strict';
@@ -81,6 +82,40 @@ var COUSIN_QUESTS = [
       { tier: 'cousins', q: 'ענבים הם הסמל של איזה אל?', a: 'דיוניסוס, אל היין והמסיבות' },
       { tier: 'cousins', q: 'איזו מתנה נתנה אתנה לעיר אתונה, וניצחה בזכותה את פוסידון?', a: 'עץ הזית' }
     ]
+  },
+  {
+    id: 'quest-olympics', title: 'The Corfu Games', titleHe: 'משחקי קורפו',
+    place: 'A beach or the villa garden',
+    symbol: '\u{1F3C6}', badgeId: null, badgeName: null, points: 30,
+    intro: 'Zeus himself watched the first games. Five kids on one island is a games-worthy roster — hold your own.',
+    introHe: 'זאוס בעצמו צפה במשחקים הראשונים. חמישה ילדים על אי אחד זה סגל ראוי למשחקים — ערכו משחקים משלכם.',
+    missions: [
+      {
+        id: 'm1', type: 'here',
+        text: "We're here: the arena is ready — beach or garden, all five kids present.",
+        textHe: 'הגענו: הזירה מוכנה — חוף או גינה, כל חמשת הילדים נוכחים.'
+      },
+      {
+        id: 'm2', type: 'check',
+        text: 'Opening ceremony: build a team torch (NO fire — a stick, paper, imagination) and parade it once around the arena.',
+        textHe: 'טקס פתיחה: בנו לפיד קבוצתי (בלי אש! מקל, נייר, דמיון) וצעדו איתו הקפה אחת סביב הזירה.'
+      },
+      {
+        id: 'm3', type: 'check',
+        text: 'Three events, mixed teams: long jump into sand, one-leg balance like a heron, and a slow-motion race — last one to finish wins.',
+        textHe: 'שלושה מקצים, קבוצות מעורבות: קפיצה לרוחק אל החול, שיווי משקל על רגל אחת כמו אנפה, ומרוץ הילוך איטי — האחרון שמסיים מנצח.'
+      },
+      {
+        id: 'm4', type: 'photo',
+        text: 'Medal ceremony: winners on an invisible podium, everyone humming the anthem. Quest photo.',
+        textHe: 'טקס המדליות: המנצחים על פודיום בלתי נראה, כולם מזמזמים את ההמנון. תמונת משימה.'
+      }
+    ],
+    questions: [
+      { tier: 'cousins', q: 'לכבוד איזה אל נערכו המשחקים האולימפיים העתיקים?', a: 'זאוס' },
+      { tier: 'cousins', q: 'מה קיבל המנצח במשחקים העתיקים במקום מדליה?', a: 'זר עלי זית' },
+      { tier: 'cousins', q: 'באיזו עיר ביוון נולדו המשחקים האולימפיים?', a: 'אולימפיה' }
+    ]
   }
 ];
 
@@ -90,27 +125,33 @@ COUSIN_QUESTS.forEach(function (q) {
   PACKS.push({ id: q.id, title: q.title, note: 'Quest trivia: ' + q.place, questions: q.questions });
 });
 
-// Bonus missions on existing quests. Optional by design: they never block a
-// claim, so quests already finished before the cousins landed stay finished.
+// Bonus missions on the existing CORFU quests. Optional by design: they never
+// block a claim, so quests finished before the cousins landed stay finished.
 var BONUS_MISSIONS = {
+  'quest-mouse': {
+    id: 'm5', type: 'check', bonus: true,
+    text: "Sea-god theater: with the cousins, act out the moment the ship turns to stone — one plays Poseidon, the rest are the crew. Freeze mid-scene for 10 seconds.",
+    textHe: 'תיאטרון אל הים: יחד עם בני הדודים, המחיזו את הרגע שבו הספינה הופכת לאבן — אחד משחק את פוסידון, השאר הם צוות הספינה. קופאים באמצע הסצנה ל־10 שניות.'
+  },
+  'quest-achilleion': {
+    id: 'm5', type: 'photo', bonus: true,
+    text: 'Statue gallery: everyone — Heroes and cousins — picks a statue in the gardens and mimics its pose exactly. Quest photo of the whole gallery.',
+    textHe: 'גלריית פסלים: כל אחד — גיבורים ובני דודים — בוחר פסל בגנים ומחקה את התנוחה שלו בדיוק. תמונת משימה של כל הגלריה.'
+  },
   'quest-beach': {
     id: 'm5', type: 'check', bonus: true,
     text: "Nausicaa's tournament: Heroes vs cousins, most catches out of 10 throws. Losers carry the towels.",
     textHe: 'טורניר נאוסיקאה: גיבורים נגד בני הדודים, הכי הרבה תפיסות מתוך 10 זריקות. המפסידים סוחבים את המגבות.'
   },
-  'site-athens': {
-    id: 'm5', type: 'check', bonus: true,
-    text: 'At the Erechtheion, a cousin retells the Athena vs Poseidon contest in Hebrew for the whole crew — on the exact spot where it happened.',
-    textHe: 'ליד האֶרֶכְתֵיאוֹן: אחד מבני הדודים מספר בעברית לכל הצוות את סיפור התחרות בין אתנה לפוסידון — בדיוק במקום שבו זה קרה.'
-  },
-  'site-nafplio': {
-    id: 'm5', type: 'check', bonus: true,
-    text: 'Cousins vs Heroes up the 999 steps: climb in pairs, youngest sets off first. Meet at the top for the view.',
-    textHe: 'בני הדודים נגד הגיבורים במעלה 999 המדרגות: עולים בזוגות, הצעיר ביותר יוצא ראשון. נפגשים למעלה בשביל הנוף.'
+  'quest-beach-2': {
+    id: 'm6', type: 'check', bonus: true,
+    text: "Forge the trident: build Poseidon's trident from what the beach gives you — driftwood, seaweed, shells. The mightiest trident earns the sea god's respect.",
+    textHe: 'חשלו את הקלשון: בנו את הקלשון של פוסידון ממה שהחוף נותן — ענפי סחף, אצות, צדפים. הקלשון האדיר ביותר זוכה בכבוד של אל הים.'
   }
 };
 if (window.CORFU) CORFU.quests.forEach(function (q) {
   if (BONUS_MISSIONS[q.id]) q.missions.push(BONUS_MISSIONS[q.id]);
+  if (q.id === 'quest-beach') q.missions.push(BONUS_MISSIONS['quest-beach-2']);
 });
 
 window.COUSINS = { quests: COUSIN_QUESTS };
