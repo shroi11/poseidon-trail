@@ -1,5 +1,20 @@
 # The Poseidon Trail — Build Log
 
+## Session: July 13, 2026 (Phase 5: עברית + the cousins)
+
+Three Hebrew-speaking cousins (14, 11, 9) join the trail mid-trip. SW **v11**.
+
+### Shipped
+- **Hebrew read-along** (`js/pack-hebrew.js`): all 12 stories (8 god-nights, 3 car stories, the finale) translated, plus every quest title/intro/mission. An English/עברית toggle sits on story and quest screens (persisted per device, `ptrail-lang-v1`); Hebrew text renders RTL. Narration stays the English voice — the toggle notes this in Hebrew.
+- **Cousins trivia tier** (`tier: 'cousins'`, chip "בני הדודים", terracotta): ~50 Hebrew questions across the warmup, all 8 nights, the road pack, key sites and the finale, difficulty spanning 9→14. Scores for the Heroes. Cousins questions join a Showdown **only when cousin names are entered** in the existing guests field, so family-only nights are unchanged; a pack that would otherwise be empty (the cousin quests) keeps them regardless.
+- **Cousins pack** (`js/pack-cousins.js`): two new quests anyone can run anywhere — *The Cousins' Trial* (Hebrew story-swap, Olympus portrait, Hebrew lesson, mixed-pairs beach relay, +30) and *The Great God Hunt* (spot-the-god-symbols scavenger hunt, +30) — plus BONUS missions on the beach quest, the Acropolis and Nafplio. Bonus missions (`bonus: true`) never block a claim, so quests finished before the cousins landed stay finished.
+- Hades riddles now accept Hebrew answers (האדס, קרברוס, פרספונה, השאול…).
+
+### Notes
+- Engine changes are small: `buildOrder` grew a cousins tier + include flag, quest claims skip `bonus` missions, and the renderer picks `storyHe/titleHe/introHe/textHe` when the toggle says עברית. All content stays in pack files.
+- Verified headless (Chromium): toggle both ways, RTL classes, guest/no-guest Showdown order (15 vs 19 warmup questions), a cousins question scores Heroes, bonus missions don't block claims, quick-trivia cousins tier. No console errors.
+- Ops: each device needs one wifi open so SW v11 lands. Guest badges for cousins work as before (3+ right answers at a Showdown).
+
 ## Session: July 5, 2026 (full build, Phases 0–4)
 
 **Live app:** https://shroi11.github.io/poseidon-trail/ · **Repo:** https://github.com/shroi11/poseidon-trail · **PRD:** `../poseidon-trail-prd.md`

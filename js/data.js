@@ -55,12 +55,13 @@ const PACKS = [
   }
 ];
 
-const TIER_LABEL = { leo: 'Leo', adam: 'Adam', parents: 'Parents' };
-const TIER_TEAM = { leo: 'heroes', adam: 'heroes', parents: 'parents' };
+const TIER_LABEL = { leo: 'Leo', adam: 'Adam', cousins: 'בני הדודים', parents: 'Parents' };
+const TIER_TEAM = { leo: 'heroes', adam: 'heroes', cousins: 'heroes', parents: 'parents' };
 const POINTS_PER_CORRECT = 10;
 
 const RULES_TEXT = [
   'Leo and Adam questions score for the Heroes. Parents questions score for the Parents.',
+  'When the cousins play, their questions (in Hebrew) join the pack and score for the Heroes too.',
   'A right answer is worth ' + POINTS_PER_CORRECT + ' points. A miss is 0. No steals.',
   'The reader reveals the answer and the table decides: got it or missed. Be fair, Poseidon is watching.',
   'Quest points from the day are added on the Scores screen before the Showdown starts.'

@@ -13,6 +13,34 @@ var ROAD = window.ROAD || { stories: [], sites: [], finale: null, reverse: [] };
 var ROAD_AUDIO = ROAD.stories.concat(ROAD.finale ? [ROAD.finale] : []);
 var ALL_AUDIO = NIGHTS.concat(ROAD_AUDIO);
 
+/* ---------- Language: English / עברית read-along ---------- */
+// The cousins (14, 11, 9) read Hebrew. The toggle swaps story, quest and
+// mission text to the pack-hebrew.js overlay; narration stays the English voice.
+
+var LANG_KEY = 'ptrail-lang-v1';
+var lang = (function () {
+  try { return localStorage.getItem(LANG_KEY) === 'he' ? 'he' : 'en'; } catch (e) { return 'en'; }
+})();
+function setLang(l) {
+  lang = l;
+  try { localStorage.setItem(LANG_KEY, l); } catch (e) {}
+  render();
+}
+function heOn(v) { return lang === 'he' && v; }
+function storyBody(s) { return heOn(s.storyHe) ? s.storyHe : s.story; }
+function storyClass(s) { return 'story-read' + (heOn(s.storyHe) ? ' rtl' : ''); }
+function titleOf(x) { return heOn(x.titleHe) ? x.titleHe : x.title; }
+function titleClass(x) { return heOn(x.titleHe) ? ' class="rtl"' : ''; }
+function introOf(q) { return heOn(q.introHe) ? q.introHe : q.intro; }
+function missionTextOf(m) { return heOn(m.textHe) ? m.textHe : m.text; }
+function langToggle() {
+  return '<div class="lang-toggle" role="group" aria-label="Language">' +
+    '<button type="button" data-lang="en" class="' + (lang === 'en' ? 'on' : '') + '">English</button>' +
+    '<button type="button" data-lang="he" class="' + (lang === 'he' ? 'on' : '') + '">עברית</button>' +
+    '</div>' +
+    (lang === 'he' ? '<div class="foot" style="margin:0 0 10px">הקריינות נשארת באנגלית — הטקסט כאן בעברית, לקריאה ביחד.</div>' : '');
+}
+
 /* ---------- State ---------- */
 
 var STATE_KEY = 'ptrail-state-v1';
@@ -331,13 +359,14 @@ function availablePacks(extraId) {
   return PACKS.filter(function (p) { return packAvailable(p) || p.id === extraId; });
 }
 
-function buildOrder(pack, perTier) {
-  var byTier = { leo: [], adam: [], parents: [] };
-  pack.questions.forEach(function (q, idx) { byTier[q.tier].push(idx); });
-  var tiers = ['leo', 'adam', 'parents'];
+function buildOrder(pack, perTier, withCousins) {
+  var byTier = { leo: [], adam: [], cousins: [], parents: [] };
+  pack.questions.forEach(function (q, idx) { if (byTier[q.tier]) byTier[q.tier].push(idx); });
+  var tiers = withCousins ? ['leo', 'adam', 'cousins', 'parents'] : ['leo', 'adam', 'parents'];
   tiers.forEach(function (t) { byTier[t] = shuffle(byTier[t]).slice(0, perTier || byTier[t].length); });
   var order = [];
-  var maxLen = Math.max(byTier.leo.length, byTier.adam.length, byTier.parents.length);
+  var maxLen = 0;
+  tiers.forEach(function (t) { if (byTier[t].length > maxLen) maxLen = byTier[t].length; });
   for (var round = 0; round < maxLen; round++) {
     tiers.forEach(function (t) { if (byTier[t][round] !== undefined) order.push(byTier[t][round]); });
   }
@@ -346,10 +375,14 @@ function buildOrder(pack, perTier) {
 
 function startShowdown(packId, perTier, guests) {
   var pack = packById(packId);
+  // Cousins questions (Hebrew) join only when cousins are at the table —
+  // unless skipping them would leave the pack empty (the cousin quests).
+  var order = buildOrder(pack, perTier, (guests || []).length > 0);
+  if (!order.length) order = buildOrder(pack, perTier, true);
   live = {
     packId: pack.id,
     guests: guests || [],
-    order: buildOrder(pack, perTier),
+    order: order,
     pos: 0,
     revealed: false,
     heroes: 0, parents: 0,
@@ -561,11 +594,12 @@ function screenNight(num) {
   }
   var done = !!state.nightsDone[n.id];
   return '<div class="place">Night ' + n.num + ' of 8 · ' + esc(n.god) + (done ? ' · <span class="ok">complete ✓</span>' : '') + '</div>' +
-    '<h1>' + esc(n.title) + '</h1>' +
+    '<h1' + titleClass(n) + '>' + esc(titleOf(n)) + '</h1>' +
     '<div class="sub">Listen, or read along. Then battle.</div>' +
+    langToggle() +
     '<button id="playNightBtn" class="gold">▶ Play the story</button>' +
     '<div class="status" id="audioStatus" style="margin:10px 0 4px;font-size:14px"></div>' +
-    '<div class="card"><div class="story-read">' + paragraphs(n.story) + '</div></div>' +
+    '<div class="card"><div class="' + storyClass(n) + '">' + paragraphs(storyBody(n)) + '</div></div>' +
     '<button id="nightShowdownBtn">' + (done ? 'Replay this night’s Showdown' : 'Start Night ' + n.num + '’s Showdown') + '</button>' +
     '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
 }
@@ -574,7 +608,8 @@ function screenQuest(qid) {
   var q = questById(qid);
   if (!q) { location.hash = '#home'; return ''; }
   var p = state.questProgress[q.id] || { missions: {}, claimed: false };
-  var allDone = q.missions.every(function (m) { return p.missions[m.id]; });
+  // Bonus missions (cousins pack) are optional and never block the claim.
+  var allDone = q.missions.every(function (m) { return m.bonus || p.missions[m.id]; });
   var rows = missionRows(q, p);
   var claim = p.claimed
     ? '<div class="status ok" style="text-align:center">Quest complete: +' + q.points + ' points banked' + (q.badgeId ? ', badge earned' : '') + '. \u{1F3C5}</div>'
@@ -582,8 +617,9 @@ function screenQuest(qid) {
       ? '<button id="claimBtn" class="gold">Claim +' + q.points + ' Hero points' + (q.badgeId ? ' & the ' + esc(q.badgeName) + ' badge' : '') + '</button>'
       : '<div class="status" style="text-align:center;opacity:.7">Finish every mission to claim +' + q.points + ' points.</div>');
   return '<div class="place">' + esc(q.place) + '</div>' +
-    '<h1>' + esc(q.title) + '</h1>' +
-    '<div class="sub story-font">' + esc(q.intro) + '</div>' +
+    '<h1' + titleClass(q) + '>' + esc(titleOf(q)) + '</h1>' +
+    '<div class="sub story-font' + (heOn(q.introHe) ? ' rtl' : '') + '">' + esc(introOf(q)) + '</div>' +
+    langToggle() +
     rows + claim +
     (q.questions.length ? '<div class="foot">This quest’s trivia appears in the Showdown pack list once you’ve been here.</div>' : '') +
     '<button class="ghost" id="backHomeBtn" style="margin-top:14px">Back to the trail</button>';
@@ -597,33 +633,36 @@ function screenRoadStory(num) {
   if (num > 1) nav += '<button class="ghost" id="prevStoryBtn" style="margin-top:10px">◀ Chapter ' + (num - 1) + '</button>';
   if (!isLast) nav += '<button id="nextStoryBtn" style="margin-top:10px">Chapter ' + (num + 1) + ' ▶</button>';
   return '<div class="place">Theseus’s Road · chapter ' + num + ' of ' + ROAD.stories.length + '</div>' +
-    '<h1>' + esc(s.title) + '</h1>' +
+    '<h1' + titleClass(s) + '>' + esc(titleOf(s)) + '</h1>' +
     '<div class="sub">A car story. Listen on the drive, or read along.</div>' +
+    langToggle() +
     '<button id="playNightBtn" class="gold">▶ Play the story</button>' +
     '<div class="status" id="audioStatus" style="margin:10px 0 4px;font-size:14px"></div>' +
-    '<div class="card"><div class="story-read">' + paragraphs(s.story) + '</div></div>' +
+    '<div class="card"><div class="' + storyClass(s) + '">' + paragraphs(storyBody(s)) + '</div></div>' +
     (isLast ? '<button id="roadShowdownBtn">Start the Road Showdown</button>' : '') +
     nav +
     '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
 }
 
 function missionRows(q, p) {
+  var HE = lang === 'he';
   return q.missions.map(function (m) {
     var done = !!p.missions[m.id];
     var control;
     if (m.type === 'photo') {
       control = '<label class="bigbtn mission-btn' + (done ? ' done-btn' : '') + '" for="mcam-' + m.id + '">' +
-        (done ? '✓ Photo captured' : '\u{1F4F8} Take the quest photo') + '</label>' +
+        (done ? (HE ? '✓ התמונה נשמרה' : '✓ Photo captured') : (HE ? '\u{1F4F8} צלמו את תמונת המשימה' : '\u{1F4F8} Take the quest photo')) + '</label>' +
         '<input id="mcam-' + m.id + '" type="file" accept="image/*" data-mission="' + m.id + '" style="display:none">' +
         '<img class="quest-photo" id="mphoto-' + m.id + '" alt="quest photo" style="display:none">';
     } else if (m.type === 'here') {
       control = '<button class="mission-btn' + (done ? ' done-btn' : '') + '" data-mission="' + m.id + '">' +
-        (done ? '✓ We were here' : '\u{1F4CD} We’re here!') + '</button>';
+        (done ? (HE ? '✓ היינו כאן' : '✓ We were here') : (HE ? '\u{1F4CD} הגענו!' : '\u{1F4CD} We’re here!')) + '</button>';
     } else {
       control = '<button class="mission-btn ghost' + (done ? ' done-btn' : '') + '" data-mission="' + m.id + '">' +
-        (done ? '✓ Done' : 'Mark done') + '</button>';
+        (done ? (HE ? '✓ בוצע' : '✓ Done') : (HE ? 'סמנו שבוצע' : 'Mark done')) + '</button>';
     }
-    return '<div class="mission"><div class="mtext">' + esc(m.text) + '</div>' + control + '</div>';
+    var chip = m.bonus ? '<span class="chip-bonus">' + (HE ? 'בונוס' : 'BONUS') + '</span> ' : '';
+    return '<div class="mission"><div class="mtext' + (heOn(m.textHe) ? ' rtl' : '') + '">' + chip + esc(missionTextOf(m)) + '</div>' + control + '</div>';
   }).join('');
 }
 
@@ -640,7 +679,7 @@ function screenFinale() {
     return '<div class="place">Act III · ' + esc(f.place) + '</div>' +
       '<h1>\u{1F512} ' + esc(f.title) + '</h1>' +
       '<div class="sub story-font">The end of the trail is sealed until you stand on the cliff at Sounio. The sea god will know if you skip ahead. He always knows.</div>' +
-      '<div class="mission"><div class="mtext">' + esc(f.missions[0].text) + '</div>' +
+      '<div class="mission"><div class="mtext' + (heOn(f.missions[0].textHe) ? ' rtl' : '') + '">' + esc(missionTextOf(f.missions[0])) + '</div>' +
       '<button class="mission-btn" data-mission="m1">\u{1F4CD} We’re here!</button></div>' +
       '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
   }
@@ -656,11 +695,12 @@ function screenFinale() {
       ? '<button id="claimBtn" class="gold">Claim +' + f.points + ' Hero points</button>'
       : '<div class="status" style="text-align:center;opacity:.7">Finish every mission to claim +' + f.points + ' points.</div>');
   return '<div class="place">Act III · ' + esc(f.place) + '</div>' +
-    '<h1>' + esc(f.title) + '</h1>' +
+    '<h1' + titleClass(f) + '>' + esc(titleOf(f)) + '</h1>' +
     banner +
+    langToggle() +
     '<button id="playNightBtn" class="gold">▶ Play the finale story</button>' +
     '<div class="status" id="audioStatus" style="margin:10px 0 4px;font-size:14px"></div>' +
-    '<div class="card"><div class="story-read">' + paragraphs(f.story) + '</div></div>' +
+    '<div class="card"><div class="' + storyClass(f) + '">' + paragraphs(storyBody(f)) + '</div></div>' +
     missionRows(f, p) + claim +
     '<button id="finaleShowdownBtn" style="margin-top:14px">' + (state.finaleDone ? 'Replay the Final Showdown' : '⚡ THE FINAL SHOWDOWN ⚡') + '</button>' +
     '<button class="ghost" id="backHomeBtn" style="margin-top:10px">Back to the trail</button>';
@@ -819,10 +859,11 @@ function screenTrivia() {
   if (!q) {
     body = '<div class="card qcard"><div class="qtext">No ' + TIER_LABEL[quick.tier] + ' questions in this pack. Pick another.</div></div>';
   } else {
+    var qRtl = q.tier === 'cousins' ? ' rtl' : '';
     body = '<div class="card qcard">' +
       '<span class="tierchip tier-' + q.tier + '">' + TIER_LABEL[q.tier] + '</span>' +
-      '<div class="qtext">' + esc(q.q) + '</div>' +
-      (quick.revealed ? '<div class="atext">' + esc(q.a) + '</div>' : '') +
+      '<div class="qtext' + qRtl + '">' + esc(q.q) + '</div>' +
+      (quick.revealed ? '<div class="atext' + qRtl + '">' + esc(q.a) + '</div>' : '') +
       '</div>' +
       (quick.revealed
         ? '<button id="quickNext" class="gold">Next question</button>'
@@ -832,7 +873,7 @@ function screenTrivia() {
     '<div class="card">' + packSel +
     '<label for="tierSel">Who is answering?</label>' +
     '<select id="tierSel">' +
-    ['leo', 'adam', 'parents'].map(function (t) {
+    ['leo', 'adam', 'cousins', 'parents'].map(function (t) {
       return '<option value="' + t + '"' + (quick.tier === t ? ' selected' : '') + '>' + TIER_LABEL[t] + '</option>';
     }).join('') +
     '</select></div>' + body;
@@ -926,7 +967,8 @@ function screenShowdown() {
       '<div class="card"><h2>Tonight’s pack</h2>' +
       '<select id="sdPack">' + options + '</select>' +
       '<label for="sdGuests">Cousins playing tonight? (first names, comma separated)</label>' +
-      '<input id="sdGuests" type="text" placeholder="e.g. Maya, Tom" maxlength="60"></div>' +
+      '<input id="sdGuests" type="text" placeholder="e.g. Maya, Tom" maxlength="60">' +
+      '<div class="rules" style="opacity:.7">With cousins at the table, their questions — בעברית — join the pack and score for the Heroes.</div></div>' +
       '<button id="sdFull" class="gold">Begin the Showdown</button>' +
       '<button id="sdQuick" class="ghost">Quick battle · 2 questions each</button>';
   }
@@ -936,6 +978,9 @@ function screenShowdown() {
   }
   var q = currentQuestion();
   var team = TIER_TEAM[q.tier];
+  var isCousins = q.tier === 'cousins';
+  var chipText = isCousins ? 'שאלה לבני הדודים' : TIER_LABEL[q.tier] + (q.tier === 'parents' ? '’ question' : '’s question');
+  var sdRtl = isCousins ? ' rtl' : '';
   var answerBtns = live.revealed
     ? '<div class="answer-row">' +
       '<button id="sdGot" class="gold">' + (team === 'heroes' ? 'Heroes' : 'Parents') + ' got it! +' + POINTS_PER_CORRECT + '</button>' +
@@ -946,9 +991,9 @@ function screenShowdown() {
     '<div>Parents<b>' + live.parents + '</b></div></div>' +
     '<div class="progress">Question ' + (live.pos + 1) + ' of ' + live.order.length + '</div>' +
     '<div class="card qcard">' +
-    '<span class="tierchip tier-' + q.tier + '">' + TIER_LABEL[q.tier] + (q.tier === 'parents' ? '’ question' : '’s question') + '</span>' +
-    '<div class="qtext">' + esc(q.q) + '</div>' +
-    (live.revealed ? '<div class="atext">' + esc(q.a) + '</div>' : '') +
+    '<span class="tierchip tier-' + q.tier + '">' + chipText + '</span>' +
+    '<div class="qtext' + sdRtl + '">' + esc(q.q) + '</div>' +
+    (live.revealed ? '<div class="atext' + sdRtl + '">' + esc(q.a) + '</div>' : '') +
     '</div>' + answerBtns +
     '<button id="sdAbandon" class="ghost" style="margin-top:22px;font-size:14px;min-height:44px">Abandon this Showdown</button>';
 }
@@ -985,6 +1030,10 @@ function render() {
 function bind(r) {
   var el;
   el = $('#backHomeBtn'); if (el) el.onclick = function () { location.hash = '#home'; };
+
+  document.querySelectorAll('.lang-toggle button').forEach(function (btn) {
+    btn.onclick = function () { setLang(btn.dataset.lang); };
+  });
 
   if (r.name === 'home') {
     $('#tonightBtn').onclick = function () {

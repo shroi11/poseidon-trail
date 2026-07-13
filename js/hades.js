@@ -9,19 +9,19 @@
 var HADES_RIDDLES = [
   {
     riddle: 'Three brothers split the world. One took the sky. One took the sea. I took what was left, and nobody sings songs about me. Say my name.',
-    accept: ['hades']
+    accept: ['hades', 'האדס', 'הדס']
   },
   {
     riddle: 'My doorman never sleeps. He has three heads, one collar, and one job: everyone comes in, nobody goes out. Who is he?',
-    accept: ['cerberus', 'kerberos', 'cerberos']
+    accept: ['cerberus', 'kerberos', 'cerberos', 'קרברוס', 'צרברוס', 'כרברוס']
   },
   {
     riddle: 'Half the year she sits at my table, and up above the world turns cold. Half the year she returns to her mother, and flowers explode from the ground. Who is she?',
-    accept: ['persephone', 'persefone', 'persephoni']
+    accept: ['persephone', 'persefone', 'persephoni', 'פרספונה', 'פרסיפונה']
   },
   {
     riddle: 'My brother shakes the earth. My other brother burns the sky. What is left is mine, and one day, everyone visits. What do I rule?',
-    accept: ['underworld', 'the underworld', 'under world']
+    accept: ['underworld', 'the underworld', 'under world', 'השאול', 'שאול', 'העולם התחתון', 'עולם תחתון']
   }
 ];
 

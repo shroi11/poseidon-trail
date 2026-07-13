@@ -1,4 +1,4 @@
-const CACHE = 'ptrail-app-v10';
+const CACHE = 'ptrail-app-v11';
 const BADGE_NAMES = [
   'poseidon', 'zeus', 'athena', 'hermes', 'apollo', 'artemis', 'hera', 'ares',
   'hephaestus', 'aphrodite', 'demeter', 'dionysus',
@@ -13,6 +13,8 @@ const ASSETS = [
   'js/data.js',
   'js/pack-corfu.js',
   'js/pack-road.js',
+  'js/pack-cousins.js',
+  'js/pack-hebrew.js',
   'js/hades.js',
   'js/app.js',
   'audio/sfx/fanfare.mp3',
