@@ -11,7 +11,11 @@ var NIGHTS = (window.CORFU && CORFU.nights) || [];
 var QUESTS = (window.CORFU && CORFU.quests) || [];
 var ROAD = window.ROAD || { stories: [], sites: [], finale: null, reverse: [] };
 var ROAD_AUDIO = ROAD.stories.concat(ROAD.finale ? [ROAD.finale] : []);
-var ALL_AUDIO = NIGHTS.concat(ROAD_AUDIO);
+// Hebrew narrations are separate audio entities: own cache key, same manager.
+// n.audioHe is set by pack-hebrew.js only once the files are published.
+function heAudioEntity(n) { return { id: n.id + '-he', audio: n.audioHe }; }
+var HE_AUDIO = NIGHTS.filter(function (n) { return n.audioHe; }).map(heAudioEntity);
+var ALL_AUDIO = NIGHTS.concat(ROAD_AUDIO).concat(HE_AUDIO);
 
 /* ---------- Language: English / עברית read-along ---------- */
 // The cousins (14, 11, 9) read Hebrew. The toggle swaps story, quest and
@@ -33,12 +37,15 @@ function titleOf(x) { return heOn(x.titleHe) ? x.titleHe : x.title; }
 function titleClass(x) { return heOn(x.titleHe) ? ' class="rtl"' : ''; }
 function introOf(q) { return heOn(q.introHe) ? q.introHe : q.intro; }
 function missionTextOf(m) { return heOn(m.textHe) ? m.textHe : m.text; }
+// What the play button plays: the Hebrew voice when it exists and the toggle
+// says עברית; otherwise the original English narration.
+function audioEntity(n) { return heOn(n.audioHe) ? heAudioEntity(n) : n; }
 function langToggle() {
   return '<div class="lang-toggle" role="group" aria-label="Language">' +
     '<button type="button" data-lang="en" class="' + (lang === 'en' ? 'on' : '') + '">English</button>' +
     '<button type="button" data-lang="he" class="' + (lang === 'he' ? 'on' : '') + '">עברית</button>' +
     '</div>' +
-    (lang === 'he' ? '<div class="foot" style="margin:0 0 10px">הקריינות נשארת באנגלית — הטקסט כאן בעברית, לקריאה ביחד.</div>' : '');
+    (lang === 'he' && !window.HE_AUDIO_READY ? '<div class="foot" style="margin:0 0 10px">הקריינות נשארת באנגלית — הטקסט כאן בעברית, לקריאה ביחד.</div>' : '');
 }
 
 /* ---------- State ---------- */
@@ -558,6 +565,7 @@ function screenHome() {
     '<h2>' + esc(ACTS[0].title) + '</h2>' +
     '<div class="rowlist">' + nightRows + '</div>' +
     '<button id="dlAllBtn" class="ghost" style="margin-top:12px;min-height:48px;font-size:15px">Download the 8 Corfu voices</button>' +
+    (HE_AUDIO.length ? '<button id="dlHeBtn" class="ghost" style="margin-top:10px;min-height:48px;font-size:15px">Download the 8 Hebrew voices · עברית</button>' : '') +
     '</div>' +
     '<div class="card act unlocked">' +
     '<span class="node">\u{1F3F9}</span>' +
@@ -1050,6 +1058,9 @@ function bind(r) {
     el = $('#dlRoadBtn'); if (el) {
       (function (btn) { btn.onclick = function () { downloadAudioList(ROAD_AUDIO, btn); }; markAudioButton(btn, ROAD_AUDIO); })(el);
     }
+    el = $('#dlHeBtn'); if (el) {
+      (function (btn) { btn.onclick = function () { downloadAudioList(HE_AUDIO, btn); }; markAudioButton(btn, HE_AUDIO); })(el);
+    }
   }
 
   if (r.name === 'roadstory') {
@@ -1140,10 +1151,11 @@ function bind(r) {
 
   if (r.name === 'night') {
     var n = NIGHTS[r.num - 1];
-    ensureNightAudio(n).catch(function () {}); // warm the cache; errors surface on play
+    var na = audioEntity(n); // Hebrew voice when toggled + published, else English
+    ensureNightAudio(na).catch(function () {}); // warm the cache; errors surface on play
     el = $('#playNightBtn'); if (el) {
-      el.onclick = function () { playNight(n); };
-      if (audioPlaying === n.id && !audioEl.paused) el.textContent = '⏸ Pause';
+      el.onclick = function () { playNight(na); };
+      if (audioPlaying === na.id && !audioEl.paused) el.textContent = '⏸ Pause';
     }
     el = $('#nightShowdownBtn'); if (el) el.onclick = function () {
       preferredPack = n.id;
