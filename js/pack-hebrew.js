@@ -142,11 +142,10 @@ nights.forEach(function (n) {
   if (h) { n.titleHe = h.title; n.storyHe = h.story; }
 });
 
-// Hebrew narration. Flip to true when audio/corfu-he/night*.mp3 are published:
-// the play button then uses the Hebrew voice while the toggle says עברית, and
-// a Hebrew download button appears on the Trail screen. Until then the play
-// button keeps the English voice, so nothing breaks before the files exist.
-var HE_AUDIO_READY = false;
+// Hebrew narration: Bill on eleven_v3 (same storyteller as the English
+// voice), 8 files in audio/corfu-he/. While the toggle says עברית the play
+// button plays these; a Hebrew download button appears on the Trail screen.
+var HE_AUDIO_READY = true;
 if (HE_AUDIO_READY) {
   nights.forEach(function (n) {
     if (HE_NIGHTS[n.id]) n.audioHe = 'audio/corfu-he/' + n.id + '.mp3';

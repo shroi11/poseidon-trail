@@ -13,8 +13,8 @@ Three Hebrew-speaking cousins (14, 11, 9) join the trail **in Corfu only** — t
 ### Notes
 - Engine changes are small: `buildOrder` grew a cousins tier + include flag, quest claims skip `bonus` missions, and the renderer picks `storyHe/titleHe/introHe/textHe` where the overlay provides them. All content stays in pack files.
 - Verified headless (Chromium): toggle both ways on nights/Corfu quests, road + finale unaffected with toggle on עברית, guest/no-guest Showdown order, cousins questions score Heroes, bonus missions don't block claims. No console errors.
-- **Hebrew narration** (asked, not built): possible. ElevenLabs "Bill" is Multilingual v2, which has no Hebrew — generate with v3/Flash v2.5 and a Hebrew-capable voice, drop files at `audio/corfu-he/nightN.mp3`, play them when the toggle says עברית. ~12MB more per device; 8 stories ≈ 16k chars.
-- Ops: each device needs one wifi open so SW v12 lands. Guest badges for cousins work as before (3+ right answers at a Showdown).
+- **Hebrew narration: SHIPPED, and it's Bill.** Audition (same ritual as the English casting): Bill, Bex, George, Brian, all reading Night 1's opening in Hebrew on `eleven_v3` (the only Hebrew-capable model; Multilingual v2 has none). Roi picked Bill — same storyteller in both languages. 8 files at `audio/corfu-he/night*.mp3` (~15MB), cached in IndexedDB under `nightN-he@v2` keys, never the SW cache. While the toggle says עברית the play button plays the Hebrew voice; "Download the 8 Hebrew voices · עברית" button on the Trail screen. Regenerating later: `scratchpad/audition.js` pattern — POST `/v1/text-to-speech/pqHfZKP75CvOlQylNhV4` with `model_id: eleven_v3`, text from pack-hebrew.js. ~11.7k chars per full run.
+- Ops: each device needs one wifi open so SW v13 lands, plus the Hebrew download button tap on the cousins' devices. Guest badges for cousins work as before (3+ right answers at a Showdown).
 
 ## Session: July 5, 2026 (full build, Phases 0–4)
 
